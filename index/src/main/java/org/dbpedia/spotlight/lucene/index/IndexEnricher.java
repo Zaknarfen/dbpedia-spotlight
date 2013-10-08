@@ -210,21 +210,29 @@ public class IndexEnricher extends BaseIndexer<Object> {
 
         for (int i=0; i<indexSize; i++) {
             Document doc = searcher.getFullDocument(i);
-            String uri = aUtil.onlyUriEnding(doc.getField(LuceneManager.DBpediaResourceField.URI.toString()).stringValue());
+            String beforeString = doc.getField(LuceneManager.DBpediaResourceField.URI.toString()).stringValue();
+            String uri = aUtil.onlyUriEnding(beforeString);
 
-                LinkedHashSet<OntologyType> types = typesMap.get(uri);
-                if (types != null) {
-                    for (OntologyType t : types) {
-                        int numberOfAdds = 1;
-                        for (int j=0; j<numberOfAdds; j++) {
-                            doc = mLucene.add(doc, t);
-                        }
+            //LOG.info("A before string " + beforeString);
+            //LOG.info("A uri " + uri);
+
+            LinkedHashSet<OntologyType> types = typesMap.get(uri);
+
+            //System.exit(1);
+            if (types != null) {
+                //LOG.info("nao ta vazio n");
+
+                for (OntologyType t : types) {
+                    int numberOfAdds = 1;
+                    for (int j=0; j<numberOfAdds; j++) {
+                        doc = mLucene.add(doc, t);
                     }
                 }
-                Term uriTerm = new Term(LuceneManager.DBpediaResourceField.URI.toString(), uri);
-                mWriter.updateDocument(uriTerm, doc);  //deletes everything with this uri and writes a new doc
+            }
+            Term uriTerm = new Term(LuceneManager.DBpediaResourceField.URI.toString(), uri);
+            mWriter.updateDocument(uriTerm, doc);  //deletes everything with this uri and writes a new doc
 
-                commit(i);
+            commit(i);
         }
 
         done(indexSize);

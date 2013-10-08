@@ -21,7 +21,7 @@ class StringUtils {
     } catch {
       case e: Exception => {
         //println("Warning! is this an URL? " + wikiUrl) // In case a string not containing a /wiki/ is passed
-        wikiUrl
+        result = wikiUrl
       }
     }
     result
