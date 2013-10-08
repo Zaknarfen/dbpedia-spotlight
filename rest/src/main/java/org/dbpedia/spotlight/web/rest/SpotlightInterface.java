@@ -135,6 +135,8 @@ public class SpotlightInterface {
 
         boolean blacklist = policyIsBlacklist(policy);
 
+        confidence = 0.05f;
+        //support = 5;
         announce(textString,confidence,support,ontologyTypesString,sparqlQuery,policy,coreferenceResolution,clientIp,spotterName,disambiguatorName);
 
         // Get input text

@@ -35,8 +35,8 @@ class CoreferenceFilter extends AnnotationFilter {
             backwardIdx -= 1
             val coreferentOcc = occs.slice(0, backwardIdx).find(prevOcc => {
                 val coreferring = isCoreferent(prevOcc.surfaceForm, laterOcc.surfaceForm)
-                if (coreferring)
-                    SpotlightLog.info(this.getClass, "found coreferent: %s at position %d probably coreferring to %s at position %d; copying %s", laterOcc.surfaceForm, laterOcc.textOffset, prevOcc.surfaceForm, prevOcc.textOffset, prevOcc.resource)
+                //if (coreferring)
+                //    SpotlightLog.info(this.getClass, "found coreferent: %s at position %d probably coreferring to %s at position %d; copying %s", laterOcc.surfaceForm, laterOcc.textOffset, prevOcc.surfaceForm, prevOcc.textOffset, prevOcc.resource)
                 coreferring
             })
             if (coreferentOcc != None) {

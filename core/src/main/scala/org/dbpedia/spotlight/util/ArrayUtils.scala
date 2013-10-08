@@ -22,7 +22,7 @@ package org.dbpedia.spotlight.util
 
 import org.apache.commons.logging.Log
 
-object ArrayUtil {
+object ArrayUtils {
   def testArrayLength(requiredLength: Int, anArrayLength: Int, aLog: Log) {
     if (anArrayLength < 1) {
       aLog.error("At least one language must be supplied to execute this process.")

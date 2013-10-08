@@ -83,7 +83,9 @@ object TypesLoader
         var i = 0;
         // CAUTION: this assumes that the most specific type is listed last
         val parser = new NxParser(instanceTypesStream)
+        var count = 0
         while (parser.hasNext) {
+          try {
             val triple = parser.next
             if(!triple(2).toString.endsWith("owl#Thing")) {
                 i = i + 1;
@@ -93,8 +95,15 @@ object TypesLoader
                 typesList.add(t)
                 typesMap = typesMap.updated(resource.uri, typesList)
             }
+          } catch {
+            case e: StringIndexOutOfBoundsException => {
+              println("String index out of range: 4")
+              count += 1
+            }
+          }
         }
-        SpotlightLog.info(this.getClass, "Done. Loaded %d types.", i)
+        println("Total wrong string processed = " + count)
+        SpotlightLog.info(this.getClass, "Done. Loaded " + i + " types.")
         typesMap
     }
     

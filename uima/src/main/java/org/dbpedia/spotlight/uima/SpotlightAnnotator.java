@@ -39,8 +39,8 @@ public class SpotlightAnnotator extends JCasAnnotator_ImplBase {
 	private String SPOTLIGHT_ENDPOINT;
 
 	// Default values for the web service parameters for the spotlight endpoint
-	private double CONFIDENCE = 0.0;
-	private int SUPPORT = 0;
+	private double CONFIDENCE = 0.2;
+	private int SUPPORT = 10;
 	private String TYPES = "";
 	private String SPARQL = "";
 	private String POLICY = "whitelist";
@@ -163,29 +163,30 @@ public class SpotlightAnnotator extends JCasAnnotator_ImplBase {
 				}
 			}while(retry);
 					
-					LOG.info("Server request completed. Writing to the index");
-					/*
-					 * Add the results to the AnnotationIndex
-					 */
-					for (Resource resource : response.getResources()) {
-						JCasResource res = new JCasResource(aJCas);
-						res.setBegin(documentOffset + new Integer(resource.getOffset()));
-						res.setEnd(documentOffset + new Integer(resource.getOffset())
-						+ resource.getSurfaceForm().length());
-						res.setSimilarityScore(new Double(resource.getSimilarityScore()));
-						res.setTypes(resource.getTypes());
-						res.setSupport(new Integer(resource.getSupport()));
-						res.setURI(resource.getURI());
+            LOG.info("Server request completed. Writing to the index");
+            /*
+             * Add the results to the AnnotationIndex
+             */
+            for (Resource resource : response.getResources()) {
+                JCasResource res = new JCasResource(aJCas);
+                res.setBegin(documentOffset + new Integer(resource.getOffset()));
+                res.setEnd(documentOffset + new Integer(resource.getOffset())
+                + resource.getSurfaceForm().length());
+                res.setSimilarityScore(new Double(resource.getSimilarityScore()));
+                res.setTypes(resource.getTypes());
+                res.setSupport(new Integer(resource.getSupport()));
+                res.setURI(resource.getURI());
 
-						res.addToIndexes(aJCas);
-					}
+                res.addToIndexes(aJCas);
+            }
 
-					documentOffset += request.length() + 1 ;
-
+            documentOffset += request.length() + 1 ;
 		}
-		documentReader.close();
 
+        try {
+		    documentReader.close();
+        } catch (Exception e) {
+            LOG.error("Cannot close the file..", e);
+        }
 	}
-
-	
 }

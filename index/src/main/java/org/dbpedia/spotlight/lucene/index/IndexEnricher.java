@@ -35,6 +35,7 @@ import org.dbpedia.spotlight.lucene.LuceneManager;
 import org.dbpedia.spotlight.lucene.search.MergedOccurrencesContextSearcher;
 import org.dbpedia.spotlight.model.*;
 import org.dbpedia.spotlight.util.IndexingConfiguration;
+import org.dbpedia.spotlight.util.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -205,9 +206,11 @@ public class IndexEnricher extends BaseIndexer<Object> {
             return;
         }
 
+        StringUtils aUtil = new StringUtils();
+
         for (int i=0; i<indexSize; i++) {
-                Document doc = searcher.getFullDocument(i);
-                String uri = doc.getField(LuceneManager.DBpediaResourceField.URI.toString()).stringValue();
+            Document doc = searcher.getFullDocument(i);
+            String uri = aUtil.onlyUriEnding(doc.getField(LuceneManager.DBpediaResourceField.URI.toString()).stringValue());
 
                 LinkedHashSet<OntologyType> types = typesMap.get(uri);
                 if (types != null) {

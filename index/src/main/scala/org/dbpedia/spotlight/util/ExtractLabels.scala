@@ -22,7 +22,7 @@ package org.dbpedia.spotlight.util
 
 import org.apache.commons.logging.LogFactory
 import com.hp.hpl.jena.rdf.model.{StmtIterator, Model}
-import ArrayUtil._
+import ArrayUtils._
 import org.apache.commons.io.FileUtils
 import org.dbpedia.spotlight.util.TDBHelper._
 import com.hp.hpl.jena.util.FileManager

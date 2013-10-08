@@ -39,7 +39,7 @@ import scala.Some
 import scala.collection.mutable.ListBuffer
 import scala.util.control.Breaks
 import TDBHelper._
-import ArrayUtil._
+import ArrayUtils._
 import org.apache.jena.riot.RiotException
 import com.hp.hpl.jena.query.QueryParseException
 
