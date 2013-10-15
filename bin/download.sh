@@ -4,40 +4,25 @@
 #+------------------------------------------------------------------------------------------------------------------------------+
 PROGNAME=$(basename $0)
 
-##### Config parameters (adjust according your target language and folder)
-
-# Windows workspace path example
-#export dbpedia_workspace="E:/Spotlight"
-
-# Linux workspace path example
-export dbpedia_workspace="/home/ubuntu/Spotlight"
-
-export lang_i18n=pt
-export language=portuguese
-export all_languages=(en bg ca cs de el es fr hu it ko pl pt ru sl tr)
-export dbpedia_version=3.8
-RELEASE_VERSION="0.6"
-
-# Paths to all the directories we are going to need
-DATA=$dbpedia_workspace/data
-DBPEDIA_DATA=$DATA/dbpedia
-JENA_DATA=$DATA/jena
-OPENNLP_DATA=$DATA/opennlp
-OUTPUT_DATA=$DATA/output
-WIKIPEDIA_DATA=$DATA/wikipedia
-RESOURCES_DATA=$DATA/resources
-
-# All the download URLs used
-OPENNLP_DOWNLOADS="http://opennlp.sourceforge.net/models-1.5"
-DBPEDIA_DOWNLOADS="http://downloads.dbpedia.org"/$dbpedia_version
-SPOTLIGHT_DOWNLOADS="http://spotlight.dbpedia.org/download/release-0.5"
-GITHUB_DOWNLOADS1="--no-check-certificate https://raw.github.com/sandroacoelho/lucene-quickstarter/4a6f571d06ab5ebb303f96eb9e6ad84e9cdd0425"
-GITHUB_DOWNLOADS2="--no-check-certificate https://raw.github.com/dbpedia-spotlight/dbpedia-spotlight/release-"$RELEASE_VERSION"/dist/src/deb/control/data/usr/share/dbpedia-spotlight"
-WIKIMEDIA_DOWNLOADS="http://dumps.wikimedia.org/"$lang_i18n"wiki/latest"
+# $1 Spotlight workspace
+# $2 Main language
 
 #+------------------------------------------------------------------------------------------------------------------------------+
 #| Functions                                                                                                                    |
 #+------------------------------------------------------------------------------------------------------------------------------+
+
+usage()
+{
+     echo "download.sh"
+     echo "Parameters: "
+     echo "1) Spotlight workspace (example /home/ubuntu/Spotlight)"
+     echo "2) Main language abbreviation (example en)"
+     echo "3) Complement languages to improve the indexing stage if desired (example 'it fr pt')"
+     echo " "
+     echo "Usage: ./download.sh /home/ubuntu/Spotlight en"
+     echo "Downloads all the needed files for the indexing process."
+     echo " "
+}
 
 # Error_exit function by William Shotts. http://stackoverflow.com/questions/64786/error-handling-in-bash
 function error_exit
@@ -60,8 +45,8 @@ function create_dir()
 # without the file name, the second states the file name, and the third is where to save that file
 function download_file()
 {
+    echo $1/$2
     # Only downloads if there is no current file or there is a newer version
-    echo "$#"
     case "$#" in
         "3")
             wget -q --spider $1/$2
@@ -73,7 +58,6 @@ function download_file()
             fi
             ;;
         "4")
-            echo "panda"
             wget -q --spider $1 $2/$3
             if [ $? -eq 0 ] ; then
                 wget -N $1 $2/$3 --directory-prefix=$4
@@ -116,7 +100,7 @@ function dl_opennlp_file()
 function test_languages_array
 {
     # Loop through the languages array
-    for i in ${all_languages[@]}
+    for i in ${$1[@]}
     do
        # Checking if the complement languages supplied are valid
        if ([ $(expr length $i) -ne 2 ] | [ $( expr match $i [a-zA-Z]\. ) -ne 2 ]); then
@@ -136,93 +120,145 @@ function unicodeEscape()
     bzip2 -z -k $1/$new_file_name
 }
 
+function downloadMain()
+{
+    # Create the installation directory
+    mkdir $1
+    touch $1/foo && rm -f $1/foo || error_exit "ERROR: The directory '$1' is not writable! Change its permissions or choose another 'dbpedia_workspace' in download.sh"
+
+    # Test the languages array
+    test_languages_array $COMPLEMENT_LANGUAGES
+    test_languages_array $ALL_LANGUAGES
+
+    # Creating all the directories needed
+    echo -e "\nCreating base directories..."
+    create_dir $DATA
+    create_dir $OUTPUT_DATA
+    create_dir $WIKIPEDIA_DATA
+    create_dir $DBPEDIA_DATA
+    create_dir $OPENNLP_DATA
+    create_dir $JENA_DATA
+    create_dir $RESOURCES_DATA
+
+    if [ $# == 3 ]
+    then
+        # Loop through the languages array
+        for i in ${ALL_LANGUAGES[@]}
+        do
+            create_dir $OUTPUT_DATA/$i
+            create_dir $OUTPUT_DATA/$i/index
+            create_dir $WIKIPEDIA_DATA/$i
+            create_dir $DBPEDIA_DATA/$i
+            download_file $DBPEDIA_DOWNLOADS/$i instance_types_$i.nt.bz2 $DBPEDIA_DATA/$i
+            create_dir $OPENNLP_DATA/$i
+            create_dir $JENA_DATA/$i
+            create_dir $JENA_DATA/$i/TDB
+            create_dir $RESOURCES_DATA/$i
+        done
+    fi
+
+    # The next step is to download all the needed files.
+    set +e
+
+    echo -e "\nGetting DBpedia Files..."
+    # The download_file function parameters are: 1) path/to/file 2) file_name 3) where/to/save
+    download_file $DBPEDIA_DOWNLOADS/$2 labels_$2.nt.bz2 $DBPEDIA_DATA/$2
+    download_file $DBPEDIA_DOWNLOADS/$2 redirects_$2.nt.bz2 $DBPEDIA_DATA/$2
+    download_file $DBPEDIA_DOWNLOADS/$2 disambiguations_$2.nt.bz2 $DBPEDIA_DATA/$2
+    download_file $DBPEDIA_DOWNLOADS/$2 instance_types_$2.nt.bz2 $DBPEDIA_DATA/$2
+
+    echo "Getting Wikipedia Dump..."
+    download_file $WIKIMEDIA_DOWNLOADS ${2}wiki-latest-pages-articles.xml.bz2 $WIKIPEDIA_DATA/$2
+    bunzip2 -fk $WIKIPEDIA_DATA/$2/${2}wiki-latest-pages-articles.xml.bz2 > $WIKIPEDIA_DATA/$2/${2}wiki-latest-pages-articles.xml
+
+    echo "Getting CoOccurrenceBased Spot Selector Statistics..."
+    download_file $GITHUB_DOWNLOADS2 "spotter.dict" $RESOURCES_DATA
+
+    echo "Getting Spot Selector..."
+    download_file $SPOTLIGHT_DOWNLOADS "spot_selector.tgz" $RESOURCES_DATA
+    tar -xvf $RESOURCES_DATA/spot_selector.tgz --force-local -C $RESOURCES_DATA
+
+    echo "Getting the tiny Lucene Context Index..."
+    # Hard coded version release to 0.5. The URL to version 0.6 has a folder and getting it from GitHub is not working
+    wget -N --no-check-certificate https://raw.github.com/dbpedia-spotlight/dbpedia-spotlight/release-0.5/dist/src/deb/control/data/usr/share/dbpedia-spotlight/index.tgz --directory-prefix=$RESOURCES_DATA
+    # download_file $GITHUB_DOWNLOADS2 "index.tgz" $RESOURCES_DATA
+    tar -xvf $RESOURCES_DATA/index.tgz --force-local -C $OUTPUT_DATA/$2
+
+    echo "Copying Hidden Markov Model to the resources folder..."
+    cp ../core/src/main/resources/pos-en-general-brown.HiddenMarkovModel $RESOURCES_DATA
+
+    echo "Getting the stop words list... (direct link to the pt version at the moment)"
+    download_file $GITHUB_DOWNLOADS1/$2 "stopwords.list" $RESOURCES_DATA/$2
+
+    echo "Getting the URI blacklisted patterns list... (direct link to the pt version at the moment)"
+    download_file $GITHUB_DOWNLOADS1/$2 "blacklistedURIPatterns."$2".list" $RESOURCES_DATA/$2
+
+    echo "Getting Apache OpenNLP models..."
+    # The download_opennlp_file function parameters are: 1) language 2) model_name 3) where/to/save
+    dl_opennlp_file $2 "chunker.bin" $OPENNLP_DATA/$2
+    dl_opennlp_file $2 "location.bin" $OPENNLP_DATA/$2
+    dl_opennlp_file $2 "organization.bin" $OPENNLP_DATA/$2
+    dl_opennlp_file $2 "person.bin" $OPENNLP_DATA/$2
+    dl_opennlp_file $2 "pos-maxent.bin" $OPENNLP_DATA/$2
+    dl_opennlp_file $2 "sent.bin" $OPENNLP_DATA/$2
+    dl_opennlp_file $2 "token.bin" $OPENNLP_DATA/$2
+
+    # The unicodeEscape parameters are: 1) path/to/dir 2) bz2_file_name
+    unicodeEscape $DBPEDIA_DATA/$2 "disambiguations_$2.nt.bz2"
+    unicodeEscape $DBPEDIA_DATA/$2 "instance_types_$2.nt.bz2"
+    unicodeEscape $DBPEDIA_DATA/$2 "labels_$2.nt.bz2"
+    unicodeEscape $DBPEDIA_DATA/$2 "redirects_$2.nt.bz2"
+
+    echo -e "\nAll the downloads are done!"
+}
+
 #+------------------------------------------------------------------------------------------------------------------------------+
 #| Main                                                                                                                         |
 #+------------------------------------------------------------------------------------------------------------------------------+
 
-# Create the installation directory
-mkdir $dbpedia_workspace
-touch $dbpedia_workspace/foo && rm -f $dbpedia_workspace/foo || error_exit "ERROR: The directory '$dbpedia_workspace' is not writable! Change its permissions or choose another 'dbpedia_workspace' in download.sh"
+if ([ $# != 2 ] && [ $# != 3 ])
+then
+    usage
+    exit
+fi
 
-set -e
+# Languages with instance types files
 
-# Test the languages array
-test_languages_array
+export dbpedia_version=3.8
+RELEASE_VERSION="0.6"
 
-# Creating all the directories needed
-echo -e "\nCreating base directories..."
-create_dir $DATA
-create_dir $OUTPUT_DATA
-create_dir $WIKIPEDIA_DATA
-create_dir $DBPEDIA_DATA
-create_dir $OPENNLP_DATA
-create_dir $JENA_DATA
-create_dir $RESOURCES_DATA
+# Paths to all the directories we are going to need
+SPOTLIGHT_WORKSPACE=$1
+LANGUAGE=$2
 
-# Loop through the languages array
-for i in ${all_languages[@]}
-do
-    create_dir $OUTPUT_DATA/$i
-    create_dir $OUTPUT_DATA/$i/index
-    create_dir $WIKIPEDIA_DATA/$i
-    create_dir $DBPEDIA_DATA/$i
-    create_dir $OPENNLP_DATA/$i
-    create_dir $JENA_DATA/$i
-    create_dir $JENA_DATA/$i/TDB
-    create_dir $RESOURCES_DATA/$i
-done
+if [ $# == 3 ]
+then
+    COMPLEMENT_LANGUAGES=$3
+fi
 
-# The next step is to download all the needed files.
-set +e
+DATA=$SPOTLIGHT_WORKSPACE/data
+DBPEDIA_DATA=$DATA/dbpedia
+JENA_DATA=$DATA/jena
+OPENNLP_DATA=$DATA/opennlp
+OUTPUT_DATA=$DATA/output
+WIKIPEDIA_DATA=$DATA/wikipedia
+RESOURCES_DATA=$DATA/resources
+ALL_LANGUAGES=(en bg ca cs de el es fr hu it ko pl pt ru sl tr)
 
-echo -e "\nGetting DBpedia Files..."
-# The download_file function parameters are: 1) path/to/file 2) file_name 3) where/to/save
-download_file $DBPEDIA_DOWNLOADS/$lang_i18n labels_$lang_i18n.nt.bz2 $DBPEDIA_DATA/$lang_i18n
-download_file $DBPEDIA_DOWNLOADS/$lang_i18n redirects_$lang_i18n.nt.bz2 $DBPEDIA_DATA/$lang_i18n
-download_file $DBPEDIA_DOWNLOADS/$lang_i18n disambiguations_$lang_i18n.nt.bz2 $DBPEDIA_DATA/$lang_i18n
-download_file $DBPEDIA_DOWNLOADS/$lang_i18n instance_types_$lang_i18n.nt.bz2 $DBPEDIA_DATA/$lang_i18n
+# All the download URLs used
+OPENNLP_DOWNLOADS="http://opennlp.sourceforge.net/models-1.5"
+DBPEDIA_DOWNLOADS="http://downloads.dbpedia.org"/$dbpedia_version
+SPOTLIGHT_DOWNLOADS="http://spotlight.dbpedia.org/download/release-0.5"
+GITHUB_DOWNLOADS1="--no-check-certificate https://raw.github.com/sandroacoelho/lucene-quickstarter/4a6f571d06ab5ebb303f96eb9e6ad84e9cdd0425"
+GITHUB_DOWNLOADS2="--no-check-certificate https://raw.github.com/dbpedia-spotlight/dbpedia-spotlight/release-"$RELEASE_VERSION"/dist/src/deb/control/data/usr/share/dbpedia-spotlight"
+WIKIMEDIA_DOWNLOADS="http://dumps.wikimedia.org/"$2"wiki/latest"
 
-echo "Getting Wikipedia Dump..."
-download_file $WIKIMEDIA_DOWNLOADS $lang_i18n"wiki-latest-pages-articles.xml.bz2" $WIKIPEDIA_DATA/$lang_i18n
-bunzip2 -fk $WIKIPEDIA_DATA/$lang_i18n/$lang_i18n"wiki-latest-pages-articles.xml.bz2" > $WIKIPEDIA_DATA/$lang_i18n/$lang_i18n"wiki-latest-pages-articles.xml"
+#set -e
 
-echo "Getting CoOccurrenceBased Spot Selector Statistics..."
-download_file $GITHUB_DOWNLOADS2 "spotter.dict" $RESOURCES_DATA
+#Call the main routine
+if [ ! -d $1 ]; then
+    downloadMain $SPOTLIGHT_WORKSPACE $LANGUAGE
+fi
 
-echo "Getting Spot Selector..."
-download_file $SPOTLIGHT_DOWNLOADS "spot_selector.tgz" $RESOURCES_DATA
-tar -xvf $RESOURCES_DATA/spot_selector.tgz --force-local -C $RESOURCES_DATA
-
-echo "Getting the tiny Lucene Context Index..."
-# Hard coded version release to 0.5. The URL to version 0.6 has a folder and getting it from GitHub is not working
-wget -N --no-check-certificate https://raw.github.com/dbpedia-spotlight/dbpedia-spotlight/release-0.5/dist/src/deb/control/data/usr/share/dbpedia-spotlight/index.tgz --directory-prefix=$RESOURCES_DATA
-# download_file $GITHUB_DOWNLOADS2 "index.tgz" $RESOURCES_DATA
-tar -xvf $RESOURCES_DATA/index.tgz --force-local -C $OUTPUT_DATA/$lang_i18n
-
-echo "Copying Hidden Markov Model to the resources folder..."
-cp ../core/src/main/resources/pos-en-general-brown.HiddenMarkovModel $RESOURCES_DATA
-
-echo "Getting the stop words list... (direct link to the pt version at the moment)"
-download_file $GITHUB_DOWNLOADS1/$lang_i18n "stopwords.list" $RESOURCES_DATA/$lang_i18n
-
-echo "Getting the URI blacklisted patterns list... (direct link to the pt version at the moment)"
-download_file $GITHUB_DOWNLOADS1/$lang_i18n "blacklistedURIPatterns."$lang_i18n".list" $RESOURCES_DATA/$lang_i18n
-
-echo "Getting Apache OpenNLP models..."
-# The download_opennlp_file function parameters are: 1) language 2) model_name 3) where/to/save
-dl_opennlp_file $lang_i18n "chunker.bin" $OPENNLP_DATA/$lang_i18n
-dl_opennlp_file $lang_i18n "location.bin" $OPENNLP_DATA/$lang_i18n
-dl_opennlp_file $lang_i18n "organization.bin" $OPENNLP_DATA/$lang_i18n
-dl_opennlp_file $lang_i18n "person.bin" $OPENNLP_DATA/$lang_i18n
-dl_opennlp_file $lang_i18n "pos-maxent.bin" $OPENNLP_DATA/$lang_i18n
-dl_opennlp_file $lang_i18n "sent.bin" $OPENNLP_DATA/$lang_i18n
-dl_opennlp_file $lang_i18n "token.bin" $OPENNLP_DATA/$lang_i18n
-
-# The unicodeEscape parameters are: 1) path/to/dir 2) bz2_file_name
-unicodeEscape $DBPEDIA_DATA/$lang_i18n "disambiguations_$lang_i18n.nt.bz2"
-unicodeEscape $DBPEDIA_DATA/$lang_i18n "instance_types_$lang_i18n.nt.bz2"
-unicodeEscape $DBPEDIA_DATA/$lang_i18n "labels_$lang_i18n.nt.bz2"
-unicodeEscape $DBPEDIA_DATA/$lang_i18n "redirects_$lang_i18n.nt.bz2"
-
-echo -e "\nAll the downloads are done!"
+#set +e
 

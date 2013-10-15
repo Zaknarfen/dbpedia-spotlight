@@ -54,10 +54,10 @@ object CreateSpotlightModel {
     val Array(lang, country) = localeCode.split("_")
     val locale = new Locale(lang, country)
 
-    if(!outputFolder.mkdir()) {
-      System.err.println("Folder %s already exists, I am too afraid to overwrite it!".format(outputFolder.toString))
-      System.exit(1)
-    }
+    //if(!outputFolder.mkdir()) {
+    //  System.err.println("Folder %s already exists, I am too afraid to overwrite it!".format(outputFolder.toString))
+    //  System.exit(1)
+    //}
 
     FileUtils.copyFile(stopwordsFile, new File(outputFolder, "stopwords.list"))
 
@@ -145,8 +145,8 @@ object CreateSpotlightModel {
 
     val wikipediaToDBpediaClosure = new WikipediaToDBpediaClosure(
       namespace,
-      new FileInputStream(new File(rawDataFolder, "redirects.nt")),
-      new FileInputStream(new File(rawDataFolder, "disambiguations.nt"))
+      new FileInputStream(new File(rawDataFolder, "redirects_" + lang + ".nt")),
+      new FileInputStream(new File(rawDataFolder, "disambiguations_" + lang + ".nt"))
     )
 
     memoryIndexer.tokenizer = Some(rawTokenizer)
@@ -161,10 +161,10 @@ object CreateSpotlightModel {
       DBpediaResourceSource.fromPigFiles(
         wikipediaToDBpediaClosure,
         new File(rawDataFolder, "uriCounts"),
-        (if (new File(rawDataFolder, "instance_types.nt").exists())
-          new File(rawDataFolder, "instance_types.nt")
-        else if (new File(rawDataFolder, "instanceTypes.tsv").exists())
-          new File(rawDataFolder, "instanceTypes.tsv")
+        (if (new File(rawDataFolder, "instance_types_" + lang + ".nt").exists())
+          new File(rawDataFolder, "instance_types_" + lang + ".nt")
+        else if (new File(rawDataFolder, "instanceTypes_" + lang + ".tsv").exists())
+          new File(rawDataFolder, "instanceTypes_" + lang + ".tsv")
         else
           null
           ),
