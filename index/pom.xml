@@ -37,6 +37,11 @@
     <properties>
         <javaOpts.Xmx>4g</javaOpts.Xmx> <!-- default that can be adjusted on the command line with -DjavaOpts.Xmx=... -->
         <spotlight.basedir>${project.basedir}/..</spotlight.basedir>
+        <jena.version>2.10.1</jena.version>
+        <jena.iri.version>0.9.6</jena.iri.version>
+        <java.compiler.version>1.7</java.compiler.version>
+        <java.tdb.version>0.10.1</java.tdb.version>
+        <scala.maven.plugin.version>3.1.0</scala.maven.plugin.version>
     </properties>
 
     <build>
@@ -121,6 +126,17 @@
                             </args-->
                         </launcher>
                         <launcher>
+                            <id>ComplementTypes</id>
+                            <mainClass>org.dbpedia.spotlight.util.ComplementTypes</mainClass>
+                            <jvmArgs>
+                                <jvmArg>-Xmx${javaOpts.Xmx}</jvmArg>
+                            </jvmArgs>
+                            <!--args>
+                                <arg>../conf/indexing-3.8.properties</arg>
+                            </args-->
+                        </launcher>
+
+                        <launcher>
                             <id>CompressIndex</id>
                             <mainClass>org.dbpedia.spotlight.lucene.index.CompressIndex</mainClass>
                             <jvmArgs>
@@ -182,33 +198,39 @@
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-core</artifactId>
+            <version>3.6.2</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-analyzers</artifactId>
+            <version>3.6.2</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-misc</artifactId>
+            <version>3.6.2</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-queries</artifactId>
+            <version>3.6.2</version>
             <type>jar</type>
         </dependency>
 
         <dependency>
             <groupId>org.apache.lucene</groupId>
             <artifactId>lucene-phonetic</artifactId>
+            <version>3.6.2</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
-         </dependency>
+            <version>1.4.1</version>
+        </dependency>
 
         <dependency>
             <groupId>commons-io</groupId>
@@ -218,6 +240,7 @@
         <dependency>
             <groupId>weka</groupId>
             <artifactId>weka</artifactId>
+            <version>3.7.3</version>
         </dependency>
 
         <dependency>
@@ -229,6 +252,12 @@
             <groupId>jdbm</groupId>
             <artifactId>jdbm</artifactId>
         </dependency>
+
+        <!--
+<dependency>
+<groupId>org.scalaj</groupId>
+<artifactId>scalaj-collection_2.9.1</artifactId>
+</dependency> -->
 
         <dependency>
             <groupId>org.apache.mahout</groupId>
@@ -243,6 +272,60 @@
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
             <artifactId>jackson-core-asl</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.jena</groupId>
+            <artifactId>jena-arq</artifactId>
+            <version>${jena.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.jena</groupId>
+            <artifactId>jena-core</artifactId>
+            <version>${jena.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.jena</groupId>
+            <artifactId>jena-iri</artifactId>
+            <version>${jena.iri.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.jena</groupId>
+            <artifactId>jena-tdb</artifactId>
+            <version>0.10.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>1.16.0-rc</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.googlecode.json-simple</groupId>
+            <artifactId>json-simple</artifactId>
+            <version>1.1</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpclient</artifactId>
+            <version>4.0-alpha4</version>
+        </dependency>
+
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>5.1.6</version>
+        </dependency>
+
+        <dependency>
+            <groupId>ant</groupId>
+            <artifactId>ant</artifactId>
+            <version>1.5</version>
         </dependency>
 
     </dependencies>
