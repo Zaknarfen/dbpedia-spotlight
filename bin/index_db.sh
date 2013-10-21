@@ -118,26 +118,27 @@ runPig()
     echo "$PIGNLPROC_JAR"
     echo "$WIKIPEDIA_DATA"
     echo "$WIKIPEDIA_DATA/${LANGUAGE}wiki-latest-pages-articles.xml"
-    exit
 
     pig -param LANG="$LANGUAGE" \
         -param ANALYZER_NAME="$1Analyzer" \
-        -param INPUT="$WIKIPEDIA_DATA/${LANGUAGE}wiki-latest-pages-articles.xml" \
-        -param OUTPUT_DIR="$TARGET_DIR/tokenCounts" \
-        -param STOPLIST_PATH="$RESOURCES_DATA/stopwords.list" \
+        -param INPUT="hadoop-data/data/${LANGUAGE}wiki-latest-pages-articles.xml" \
+        -param OUTPUT_DIR="/usr/local/pt/tokenCounts" \
+        -param STOPLIST_PATH="/data/stopwords.list" \
         -param STOPLIST_NAME="stopwords.list" \
-        -param PIGNLPROC_JAR="$PIGNLPROC_JAR" \
-        -param MACROS_DIR="$PIG_DATA/pignlproc/examples/macros/" \
-        -m $PIG_DATA/pignlproc/examples/indexing/token_counts.pig.params $PIG_DATA/pignlproc/examples/indexing/token_counts.pig
+        -param PIGNLPROC_JAR="SpotlightTest/data/pig/pignlproc/target/pignlproc-0.1.0-SNAPSHOT.jar" \
+        -param MACROS_DIR="SpotlightTest/data/pig/pignlproc/examples/macros/" \
+        -m SpotlightTest/data/pig/pignlproc/examples/indexing/token_counts.pig.params SpotlightTest/data/pig/pignlproc/examples/indexing/token_counts.pig
 
     pig -param LANG="$LANGUAGE" \
         -param LOCALE="$LOCALE" \
-        -param INPUT="$WIKIPEDIA_DATA/${LANGUAGE}wiki-latest-pages-articles.xml" \
-        -param OUTPUT="$TARGET_DIR/names_and_entities" \
+        -param INPUT="/hadoop-data/data/${LANGUAGE}wiki-latest-pages-articles.xml" \
+        -param OUTPUT="/usr/local/pt/names_and_entities" \
         -param TEMPORARY_SF_LOCATION="$TARGET_DIR/sf_lookup" \
-        -param PIGNLPROC_JAR="$PIGNLPROC_JAR" \
-        -param MACROS_DIR="$PIG_DATA/pignlproc/examples/macros/" \
-        -m $PIG_DATA/pignlproc/examples/indexing/names_and_entities.pig.params $PIG_DATA/pignlproc/examples/indexing/names_and_entities.pig
+        -param PIGNLPROC_JAR="/cygwin/usr/local/SpotlightTest/data/pig/pignlproc/target/pignlproc-0.1.0-SNAPSHOT.jar" \
+        -param MACROS_DIR="/cygwin/usr/local/SpotlightTest/data/pig/pignlproc/examples/macros/" \
+        -m SpotlightTest/data/pig/pignlproc/examples/indexing/names_and_entities.pig.params SpotlightTest/data/pig/pignlproc/examples/indexing/names_and_entities.pig
+
+    exit
 }
 
 copyResult()
@@ -172,7 +173,8 @@ indexDbMain()
     #cd E:/hadoop-1.2.1/bin
 
     #Load the dump into HDFS:
-    cd E:/hadoop-data/data
+    #cd E:/hadoop-data/data
+    #cd /hadoop-data/data
     echo $(pwd)
     #echo "Loading Wikipedia dump into HDFS..."
     #loadDumpToHDFS $WIKIPEDIA_DATA $LANGUAGE $RESOURCES_DATA $PIG_DATA
@@ -185,10 +187,15 @@ indexDbMain()
     #cd $DATA_DIR
     #loadStopwordsToHDFS $STOPWORDS $OPENNLP_DATA $LANGUAGE
 
+    #hadoop fs -put localfile1 localfile2 /user/hadoop/hadoopdir
+
     #Adapt pig params:
     #cd $DATA_DIR/pig/pignlproc
+    cd /usr/local
     echo $(pwd)
-    PIGNLPROC_JAR="$PIG_DATA/pignlproc/target/pignlproc-0.1.0-SNAPSHOT.jar"
+
+    #PIGNLPROC_JAR="$PIG_DATA/pignlproc/target/pignlproc-0.1.0-SNAPSHOT.jar"
+    PIGNLPROC_JAR="target/pignlproc-0.1.0-SNAPSHOT.jar"
 
     #Run pig:
     runPig $STEMMER
