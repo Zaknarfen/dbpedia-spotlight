@@ -11,7 +11,6 @@ export INDEX_CONFIG_FILE=../conf/indexing.properties
 
 JAVA_XMX=14g
 
-
 # you have to run maven2 from the module that contains the indexing classes
 cd ../index
 # the indexing process will generate files in the directory below
@@ -23,24 +22,6 @@ fi
 
 # first step is to extract valid URIs, synonyms and surface forms from DBpedia
 mvn scala:run -Dlauncher=ExtractCandidateMap "-DjavaOpts.Xmx=$JAVA_XMX" "-DaddArgs=$INDEX_CONFIG_FILE"
-
-# now we collect parts of Wikipedia dump where DBpedia resources occur and output those occurrences as Tab-Separated-Values
-echo -e "Parsing Wikipedia dump to extract occurrences...\n"
-mvn scala:run -Dlauncher=ExtractOccsFromWikipedia "-DjavaOpts.Xmx=$JAVA_XMX" "-DaddArgs=$INDEX_CONFIG_FILE|$DBPEDIA_WORKSPACE/data/output/occs.tsv"
-
-# (recommended) sorting the occurrences by URI will speed up context merging during indexing
-echo -e "Sorting occurrences to speed up indexing...\n"
-sort -t$'\t' -k2 $DBPEDIA_WORKSPACE/data/output/occs.tsv >$DBPEDIA_WORKSPACE/data/output/occs.uriSorted.tsv
-
-# (optional) preprocess surface forms however you want: produce acronyms, abbreviations, alternative spellings, etc.
-#            in the example below we scan paragraphs for uri->sf mappings that occurred together more than 3 times.
-echo -e "Extracting Surface Forms...\n"
-cat $DBPEDIA_WORKSPACE/data/output/occs.uriSorted.tsv | cut -d$'\t' -f 2,3 |  perl -F/\\t/ -lane 'print "$F[1]\t$F[0]";' > $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromOccs.tsv
-sort $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromOccs.tsv | uniq -c > $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromOccs.count
-grep -Pv "      [123] " $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromOccs.count | sed -r "s|\s+[0-9]+\s(.+)|\1|" > $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromOccs-thresh3.tsv
-
-cp $DBPEDIA_WORKSPACE/data/output/surfaceForms.tsv $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromTitRedDis.tsv
-cat $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromTitRedDis.tsv $DBPEDIA_WORKSPACE/data/output/surfaceForms-fromOccs.tsv > $DBPEDIA_WORKSPACE/data/output/surfaceForms.tsv
 
 # now that we have our set of surfaceForms, we can build a simple dictionary-based spotter from them
 mvn scala:run -Dlauncher=IndexLingPipeSpotter "-DjavaOpts.Xmx=$JAVA_XMX" "-DaddArgs=$INDEX_CONFIG_FILE"
