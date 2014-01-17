@@ -18,22 +18,17 @@
 
 package org.dbpedia.spotlight.util
 
-
-import io.Source
-import org.dbpedia.spotlight.log.SpotlightLog
-import java.io._
-import org.dbpedia.spotlight.model.{Factory, SpotlightConfiguration, SurfaceForm}
-import java.util.Scanner
-import org.semanticweb.yars.nx.parser.NxParser
-import org.semanticweb.yars.nx.{Literal, Resource, Triple}
-import util.matching.Regex
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
-import java.text.Normalizer
-import java.text.Normalizer.Form
-import org.apache.commons.lang.StringUtils
-import org.dbpedia.extraction.util.WikiUtil
+import scala.util.matching.Regex
+import org.dbpedia.spotlight.model.{Factory, SpotlightConfiguration}
+import scala.io.Source
+import java.io.{FileWriter, FileInputStream, PrintStream, File}
 import org.dbpedia.spotlight.lucene.index.ExtractOccsFromWikipedia
-import scala.collection.mutable.ListBuffer
+import org.dbpedia.spotlight.log.SpotlightLog
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import org.semanticweb.yars.nx.parser.NxParser
+import java.text.Normalizer
+import org.apache.commons.lang.StringUtils
+import java.text.Normalizer.Form
 import com.google.code.externalsorting.ExternalSort
 
 /**
@@ -44,27 +39,46 @@ import com.google.code.externalsorting.ExternalSort
  *
  * Contains logic of what to index wrt. URIs and SurfaceForms.
  *
- *
  * @author maxjakob
  * @author pablomendes (created blacklisted URI patterns for language-specific stuff (e.g. List_of, etc.)
+ * @author Renan Dembogurski - zaknarfen
+ * @author Alexandre Cançado Cardoso - accardoso
  */
-object ExtractCandidateMap
-{
-  var maximumSurfaceFormLength = 50
 
-  // DBpedia input
-  var titlesFileName          = ""
-  var redirectsFileName       = ""
-  var disambiguationsFileName = ""
-  var blacklistedURIPatterns = Set[Regex]()
+object ExtractCandidateMap {
 
-  // output
-  var conceptURIsFileName     = ""
-  var redirectTCFileName      = ""
-  var surfaceFormsFileName    = ""
+  //List of the code of every possible candidate mapping sources to be used
+  val candidateMappingSources: List[Char] = List[Char]('T','R','D','O','M') //T->titles; R->redirects; D->disambiguations; O->occurrences; M->mapping-based properties
+
+  //ExtractCandidatesMap Input Files
+  private var titlesFileName: String = ""
+  private var redirectsFileName: String = ""
+  private var disambiguationsFileName: String = ""
+
+  //ExtractCandidatesMap Output Files
+  private var conceptURIsFileName: String = ""
+  private var redirectTCFileName: String= ""
+  private var occsFileName: String = ""
+  private var surfaceFormsFileName: String = ""
+
+  //ExtractCandidatesMap options/configurations
+  private var config : IndexingConfiguration = null
+  private var language: String = ""
+  private var blacklistedURIPatterns: Set[Regex] = Set[Regex]()
+  private var stopWords: Set[String] = Set[String]()
+  private var maximumSurfaceFormLength: Int = 50
 
 
-  def saveConceptURIs() {
+  /* Validate the list of candidate mapping sources to be used */
+  private def validateCandidateMappingSourcesToUse(candidateMappingSourcesToUse: List[Char]) {
+    if(!(candidateMappingSourcesToUse.length <= candidateMappingSources.length && candidateMappingSourcesToUse.length > 0))
+      throw new IllegalArgumentException("Invalid number of candidate mapping sources was informed. The codes of the registered sources are: %s".format(candidateMappingSources.mkString(", ")))
+    if(!candidateMappingSourcesToUse.forall(candidateMappingSources.contains(_)))
+      throw new UnsupportedOperationException("At least one informed code at the candidate mapping source list is not from a valid source. The codes of the registered sources are: %s".format(candidateMappingSources.mkString(", ")))
+  }
+
+  /* Obtain the concept URIs from the input file and save then at conceptURIsFileName */
+  private def extractConceptURIs() {
     if (!new File(titlesFileName).isFile || !new File(redirectsFileName).isFile || !new File(disambiguationsFileName).isFile) {
       throw new IllegalStateException("labels, redirects or disambiguations file not set")
     }
@@ -123,7 +137,7 @@ object ExtractCandidateMap
     //        conceptURIsFileName = conceptURIsFile.getAbsolutePath
     //        IndexConfiguration.set("conceptURIs", conceptURIsFileName)
   }
-
+  /* Verify if the informed uri is (looks like) a good uri */
   private def looksLikeAGoodURI(uri : String) : Boolean = {
     // cannot contain a slash (/)
     if (uri contains "/")
@@ -139,7 +153,8 @@ object ExtractCandidateMap
     true
   }
 
-  def saveRedirectsTransitiveClosure() {
+  /* Obtain the redirects transitive closure from the input files and save it at redirectTCFileName */
+  private def extractRedirectsTransitiveClosure() {
     if (!new File(redirectsFileName).isFile) {
       throw new IllegalStateException("redirects file not set")
     }
@@ -186,15 +201,7 @@ object ExtractCandidateMap
     //        redirectTCFileName = redirectTCFileName.getAbsolutePath
     //        IndexConfiguration.set("preferredURIs", redirectTCFileName)
   }
-
-  private def normalizeString(aString: String): String = {
-    val searchList = Array("Ä", "ä", "Ö", "ö", "Ü", "ü", "ß")
-    val replaceList = Array("Ae", "ae", "Oe", "oe", "Ue", "ue", "sz")
-
-    if (aString == null) ""
-    else Normalizer.normalize(StringUtils.replaceEachRepeatedly(aString, searchList, replaceList), Form.NFD).replaceAll("[^\\p{ASCII}]", "")
-  }
-
+  /* Traverse the URIs chain to define its end */
   private def getEndOfChainUri(m : Map[String,String], k : String, acc : Int) : String = {
     // get end of chain but check for redirects to itself
     m.get(k) match {
@@ -216,9 +223,53 @@ object ExtractCandidateMap
       case None => k
     }
   }
+  /* Remove special chars */
+  private def normalizeString(aString: String): String = {
+    var searchList: Array[String] = Array()
+    var replaceList: Array[String] = Array()
+    language match {
+      case "portuguese" => {
+        searchList = Array("Á" ,"À" ,"Ã" ,"É" ,"Ê" ,"Í" ,"Ó" ,"Ô" ,"Õ" ,"Ú" ,"Ü" ,"Ç")
+        replaceList = Array("A" ,"A" ,"A" ,"E" ,"E" ,"I" ,"O" ,"O" ,"O" ,"U" ,"U" ,"C")
+        searchList = searchList ++ searchList.map(_.toLowerCase).toList
+        replaceList = replaceList ++ replaceList.map(_.toLowerCase).toList
+      }
+      case "german" | _ => {
+        searchList = Array("Ä", "ä", "Ö", "ö", "Ü", "ü", "ß")
+        replaceList = Array("Ae", "ae", "Oe", "oe", "Ue", "ue", "ss")
+      }
+    }
 
+    if (aString == null) ""
+    else Normalizer.normalize(StringUtils.replaceEachRepeatedly(aString, searchList, replaceList), Form.NFD).replaceAll("[^\\p{ASCII}]", "")
+  }
 
-  def isGoodSurfaceForm(surfaceForm : String, stopWords : Set[String]) : Boolean = {
+  /* Extract the candidates from the titles and save them */
+  private def extractCandidatesFromTitles(titlesCandidatesFileName: String, lowerCased : Boolean=false): File = {
+    if (!new File(conceptURIsFileName).isFile) {
+      throw new IllegalStateException("concept URIs not created yet; call saveConceptURIs first or set concept URIs file")
+    }
+
+    val candidatesT: File = new File(titlesCandidatesFileName)
+
+    val stream = new PrintStream(candidatesT, "UTF-8")
+    //All titles of concept URIs are surface forms
+    for (conceptUri <- Source.fromFile(conceptURIsFileName, "UTF-8").getLines()) {
+      getCleanSurfaceForm(conceptUri, stopWords, lowerCased) match {
+        case Some(sf : String) => stream.println(conceptUri+"\t"+sf)
+        case None => SpotlightLog.debug(this.getClass, "Concept URI '%s' does not decode to a good surface form", conceptUri)
+      }
+    }
+
+    candidatesT
+  }
+  /* Returns a cleaned surface form if it is considered to be worth keeping */
+  private def getCleanSurfaceForm(surfaceForm : String, stopWords : Set[String], lowerCased : Boolean=false) : Option[String] = {
+    val cleanedSurfaceForm = Factory.SurfaceForm.fromWikiPageTitle(surfaceForm, lowerCased).name
+    if (isGoodSurfaceForm(cleanedSurfaceForm, stopWords)) Some(cleanedSurfaceForm) else None
+  }
+  /* Verify if the surface form is a good one */
+  private def isGoodSurfaceForm(surfaceForm : String, stopWords : Set[String]) : Boolean = {
     // not longer than limit
     if (surfaceForm.length > maximumSurfaceFormLength) {
       return false
@@ -243,31 +294,37 @@ object ExtractCandidateMap
     true
   }
 
-  def saveSurfaceForms(stopWords : Set[String], lowerCased : Boolean=false) {
-    if (!new File(redirectsFileName).isFile || !new File(disambiguationsFileName).isFile) {
-      throw new IllegalStateException("redirects or disambiguations file not set")
+  /* Extract the candidates from the redirects and save them */
+  private def extractCandidatesFromRedirects(redirectsCandidatesFileName: String, lowerCased : Boolean=false): File = {
+    if (!new File(redirectsFileName).isFile) {
+      throw new IllegalStateException("redirects file not set")
     }
+
+    extractCandidatesFromRedirectsOrDisambiguations(redirectsCandidatesFileName, redirectsFileName, lowerCased)
+  }
+
+  /* Extract the candidates from the disambiguations and save them */
+  private def extractCandidatesFromDisambiguations(disambsCandidatesFileName: String, lowerCased : Boolean=false): File = {
+    if (!new File(disambiguationsFileName).isFile) {
+      throw new IllegalStateException("disambiguations file not set")
+    }
+
+    extractCandidatesFromRedirectsOrDisambiguations(disambsCandidatesFileName, disambiguationsFileName, lowerCased)
+  }
+
+  /* Extractor for both redirects/disambiguations */
+  private def extractCandidatesFromRedirectsOrDisambiguations(specificCandidatesFileName: String, sourceFileName: String, lowerCased : Boolean=false): File = {
     if (!new File(conceptURIsFileName).isFile) {
       throw new IllegalStateException("concept URIs not created yet; call saveConceptURIs first or set concept URIs file")
     }
 
-    SpotlightLog.info(this.getClass, "Creating surface forms file %s ...", surfaceFormsFileName)
-
-    SpotlightLog.info(this.getClass, "  storing titles of concept URIs...")
     var conceptURIs = Set[String]()
-    val surfaceFormsStream = new PrintStream(surfaceFormsFileName, "UTF-8")
-    // all titles of concept URIs are surface forms
     for (conceptUri <- Source.fromFile(conceptURIsFileName, "UTF-8").getLines()) {
-      getCleanSurfaceForm(conceptUri, stopWords, lowerCased) match {
-        case Some(sf : String) => surfaceFormsStream.println(sf+"\t"+conceptUri)
-        case None => SpotlightLog.debug(this.getClass, "    concept URI %s' does not decode to a good surface form", conceptUri)
-      }
       conceptURIs += conceptUri
     }
-
-    SpotlightLog.info(this.getClass, "  storing titles of redirect and disambiguation URIs...")
     val pattern = new Regex("""(\w*)/resource/(\w*)""", "stringToReplace", "uri")
-    for (fileName <- List(redirectsFileName, disambiguationsFileName)) {
+    val stream = new PrintStream(specificCandidatesFileName, "UTF-8")
+    for (fileName <- List((new File(sourceFileName)))) {
       val input = new BZip2CompressorInputStream(new FileInputStream(fileName), true)
       val parser = new NxParser(input)
       while (parser.hasNext) {
@@ -278,7 +335,7 @@ object ExtractCandidateMap
 
           if (conceptURIs contains uri) {
             getCleanSurfaceForm(surfaceFormUri, stopWords, lowerCased) match {
-              case Some(sf : String) => surfaceFormsStream.println(sf+"\t"+uri)
+              case Some(sf : String) => stream.println(uri+"\t"+sf)
               case None =>
             }
           }
@@ -290,305 +347,349 @@ object ExtractCandidateMap
       }
       input.close()
     }
+    stream.close()
 
-    surfaceFormsStream.close()
-    SpotlightLog.info(this.getClass, "Done.")
-    //        surfaceFormsFileName = surfaceFormsFile.getAbsolutePath
-    //        IndexConfiguration.set("surfaceForms", surfaceFormsFileName)
+    new File(specificCandidatesFileName)
   }
 
+  /* Extract the candidates from the occurrences and save them */
+  private def extractCandidatesFromOccs(occsCandidatesFileName: String, lowerCased : Boolean=false): File = {
+    val candidateO: File = new File(occsCandidatesFileName)
 
-  def saveSurfaceForms_fromGraph(stopWords : Set[String], lowerCased : Boolean=false) {
-    if (!new File(redirectsFileName).isFile || !new File(disambiguationsFileName).isFile) {
-      throw new IllegalStateException("redirects or disambiguations file not set")
+    val stream = new PrintStream(candidateO, "UTF-8")
+    for (line <- Source.fromFile(occsFileName).getLines()) {
+      val lineArray = line.split("\t")
+      stream.println(lineArray(2) + "\t" + lineArray(1)) //line content structure: id \t surface form \t entity uri \t ...
     }
-    if (!new File(conceptURIsFileName).isFile) {
-      throw new IllegalStateException("concept URIs not created yet; call saveConceptURIs first or set concept URIs file")
-    }
+    stream.close()
 
-    SpotlightLog.info(this.getClass, "Creating surface forms file %s ...", surfaceFormsFileName)
-    SpotlightLog.info(this.getClass, "  loading concept URIs from %s...", conceptURIsFileName)
-    val conceptURIs = Source.fromFile(conceptURIsFileName, "UTF-8").getLines().toSet
+    candidateO
+  }
 
-    SpotlightLog.info(this.getClass, "  storing titles of concept URIs...")
-    val surfaceFormsStream = new PrintStream(surfaceFormsFileName, "UTF-8")
-    // all titles of concept URIs are surface forms
-    for (conceptUri <- conceptURIs) {
-      getCleanSurfaceForm(conceptUri, stopWords, lowerCased) match {
-        case Some(sf : String) => surfaceFormsStream.println(sf+"\t"+conceptUri)
-        case None =>
-      }
-    }
+  /* Extract the candidates from the mapping based properties and save them */
+  private def extractCandidatesFromMappingBasedProperties(mapBasedPropsCandidatesFileName: String, lowerCased : Boolean=false): File = {
+    val candidateM: File = new File(mapBasedPropsCandidatesFileName)
 
-    SpotlightLog.info(this.getClass, "  making map from %s and %s...", redirectsFileName, disambiguationsFileName)
-    // make reverse map of redirects and disambiguations
-    var linkMap = Map[String,List[String]]()
-    val pattern = new Regex("""(\w*)/resource/(\w*)""", "stringToReplace", "uri")
-    for (fileName <- List(redirectsFileName, disambiguationsFileName)) {
-      val input = new BZip2CompressorInputStream(new FileInputStream(fileName), true)
-      val parser = new NxParser(input)
-      while (parser.hasNext) {
-        val triple = parser.next
-        try {
-          val subj = pattern.findFirstMatchIn(triple(0).toString).get.group("uri")
-          val obj = pattern.findFirstMatchIn(triple(2).toString).get.group("uri")
-          linkMap = linkMap.updated(obj, linkMap.get(obj).getOrElse(List[String]()) ::: List(subj))
-        } catch {
-          case e: Exception => {
-            SpotlightLog.info(this.getClass, "String in the wrong format skipped! ") // In case a string not containing a /resource/ is passed
+    //TODO - extract the candidates from the "naming properties" from mapping_based properties (this code has not been shared yet)
+    //As it can not be implemented yet this method return an empty file, simulating that the extraction generate no candidate
+    val writer = new FileWriter(candidateM, false)
+    writer.write("")
+    writer.close()
+
+    candidateM
+  }
+
+  /* Define the count column with the number of repetitions of the same candidate are and remove the duplicates */
+  private def constructCountColumn(candidateMap: File){
+    val candidateMapFileNameArray: Array[String] = candidateMap.getCanonicalPath.split('.')
+    val withoutCountCandidateMapFile: File = new File(candidateMapFileNameArray.slice(0, candidateMapFileNameArray.length-1).mkString(".")+".withoutCount."+candidateMapFileNameArray(candidateMapFileNameArray.length-1)+".tmp")
+
+    //Replace the informed candidateMap by itself sorted
+    sortCandidateMap(candidateMap)
+
+    //Back up the original (already sorted) candidateMap file
+    if(!candidateMap.renameTo(withoutCountCandidateMapFile))
+      throw new IllegalAccessException("Could not rename the file %s to %s".format(candidateMap.getCanonicalPath, withoutCountCandidateMapFile.getCanonicalPath))
+
+    //Count the candidates repetition put it at the new count column and remove candidate duplicates
+    try{
+      val mapCandidatesIterator = Source.fromFile(withoutCountCandidateMapFile).getLines()
+      //Initialize candidates fields with the first line candidate and the counting variable to count this one
+      var currentCandidateFields: Array[String] = mapCandidatesIterator.take(1).mkString("").split("\t")
+      var count:Int = 1
+      //Set the output to the candidateMap (which is empty)
+      val stream = new PrintStream(candidateMap, "UTF-8")
+      //Transverse candidate map counting every candidate (it skip the first line/candidate as it was already read at currentCandidateFields and count initialization)
+      mapCandidatesIterator.foreach{ line =>
+        val lineCandidateFields: Array[String] = line.split("\t")
+        //Get the line candidate uri and surface form and treat if it does not have one or both
+        var lineUri: String = ""
+        var lineSf: String = ""
+        try{
+          lineUri = lineCandidateFields(0)
+          lineSf = lineCandidateFields(1)
+        }catch{
+          case e: ArrayIndexOutOfBoundsException =>{
+            if(currentCandidateFields.length < 2)
+              throw e
+            e.getMessage match {
+              case "0" | null => //It is a empty line, so move on
+              case "1" => {
+                SpotlightLog.warn(this.getClass, "Invalid entry: No surface form candidate ( uri = %s ) in candidate map: %s",
+                  lineCandidateFields(0), withoutCountCandidateMapFile.getCanonicalPath)
+                SpotlightLog.warn(this.getClass, "The invalid entry was discarded.")
+              }
+              case _ => throw e
+            }
+          }
+        }
+        //If the line candidate is valid (the lineUri and the lineSf were set)
+        if(lineSf != "" && lineUri!= ""){
+          //If the candidates both surface forms and URIs are equal then they are the same candidate
+          if(currentCandidateFields(0).equals(lineUri) && currentCandidateFields(1).equals(lineSf)){
+            //Count 1 more of the same candidate and do not print the duplicate
+            count +=1
+          }else { //As the input map is sorted, when the next candidate differs from the current one, there are no more equal candidate in the map.
+            if(!currentCandidateFields.isEmpty){
+              //Print the candidate (just one time) and its count of how many time had occur
+              stream.println((currentCandidateFields :+ count).mkString("\t"))
+            }
+            //The new current candidate is the line candidate
+            currentCandidateFields = lineCandidateFields
+            //Start the counting for the new current candidate
+            count = 1
           }
         }
       }
-      input.close()
+      stream.close()
+    } catch {
+      case e: Exception => {
+        e.printStackTrace()
+        throw new Exception("Could not construct the count column (count the candidates repetitions and remove its duplicates) at the file %s . The original file is at %s".format(candidateMap.getCanonicalPath, withoutCountCandidateMapFile.getCanonicalPath))
+      }
     }
 
-    SpotlightLog.info(this.getClass, "  collecting surface forms from map...")
-    for (currentURI <- linkMap.keys.filter(conceptURIs contains _)) {
-      var linkedUris = List(currentURI)
-      var cyclePrevention = List[String]()
-      while (linkedUris.nonEmpty) {
-        // save the decoded URI as surface form for the current concept URI
-        getCleanSurfaceForm(linkedUris.head, stopWords, lowerCased) match {
-          case Some(sf : String) => surfaceFormsStream.println(sf+"\t"+currentURI)
-          case None =>
+    //As everything run ok, delete the original candidate map back up
+    if(!(new File(withoutCountCandidateMapFile.getCanonicalPath)).delete() && (new File(withoutCountCandidateMapFile.getCanonicalPath)).exists())
+      SpotlightLog.warn(this.getClass(), "Could not delete the temporary file with candidate map without the count column (and with duplicates) at: %s", withoutCountCandidateMapFile.getCanonicalPath)
+  }
+  /* Replace the candidateMap file by itself sorted */
+  private def sortCandidateMap(candidateMap: File){
+    val candidateMapFileNameArray: Array[String] = candidateMap.getCanonicalPath.split('.')
+    val unsortedCandidateMap: File = new File(candidateMapFileNameArray.slice(0, candidateMapFileNameArray.length-1).mkString(".")+".unsorted."+candidateMapFileNameArray(candidateMapFileNameArray.length-1)+".tmp")
+
+    //Back up the original candidateMap
+    if(!candidateMap.renameTo(unsortedCandidateMap))
+      throw new IllegalAccessException("Could not rename the file %s to %s".format(candidateMap.getCanonicalPath, unsortedCandidateMap.getCanonicalPath))
+
+    //Sort the original candidate map at unsortedCandidateMap file into the candidateMap file
+    try{
+      //Use ExternalSort to sort the candidate map
+      ExternalSort.sort(unsortedCandidateMap, candidateMap)
+    } catch {
+      case e: Exception => throw new Exception("Could not sort the file %s . The original unsorted file is at %s"
+        .format(candidateMap.getCanonicalPath, unsortedCandidateMap.getCanonicalPath))
+    }
+
+    //As everything run ok, delete the original candidate map back up
+    if(!unsortedCandidateMap.delete() && unsortedCandidateMap.exists())
+      SpotlightLog.warn(this.getClass(), "Could not delete the temporary file with an unsorted partial candidate map at: %s", unsortedCandidateMap.getCanonicalPath)
+  }
+
+  /* Merge all candidate maps, listing at a new last column the sources */
+  private def mergeCandidateMaps(candidateMaps: List[File], candidateMapsSourceCodes: List[Char]): File = {
+    //Verify if for each candidate map there is a respective code (and if there is no extra code)
+    if(candidateMaps.length != candidateMapsSourceCodes.length)
+      throw new IllegalArgumentException("The candidateMaps files list and its respective codes list must be of the same length.")
+
+    /* Merge pairs of candidates map files recursively into a new file */
+    def recursiveMerge(candidateMaps: List[File], candidateMapsSourceCodes: List[Char]): File = {
+      var mergedCandidateMap: File = new File(surfaceFormsFileName+".merge_of_"+candidateMapsSourceCodes.mkString("")+"_maps.tmp")
+
+      //Stop criterion: 1 map only
+      if(candidateMaps.length == 1){
+        val stream = new PrintStream(mergedCandidateMap, "UTF-8")
+        Source.fromFile(candidateMaps(0)).getLines().foreach{ line =>
+          stream.println(line+"\t"+candidateMapsSourceCodes(0).toString.toUpperCase)
         }
-        // get all redirects and disambiguations that link to the last URI
-        // take care that there are no loops
-        val linksList = linkMap.get(linkedUris.head).getOrElse(List[String]()).filterNot(cyclePrevention contains _)
+        stream.close
+      }else{
+        sortCandidateMap(candidateMaps(0))
+        val tailMaps:File = recursiveMerge(candidateMaps.slice(1, candidateMaps.length), candidateMapsSourceCodes.slice(1, candidateMaps.length))
+        sortCandidateMap(tailMaps)
+        val headMapSourceCode = candidateMapsSourceCodes(0).toString().toUpperCase
 
-        // add links that point here
-        linkedUris = linkedUris.tail ::: linksList
+        val headCandidates = Source.fromFile(candidateMaps(0)).getLines()
+        var headCurrentCandidateFields: Array[String] = Array()
+        var headMapHasFinished: Boolean = false
+        if(!headCandidates.isEmpty)
+          headCurrentCandidateFields = headCandidates.next().split("\t")
+        else
+          headMapHasFinished = true
 
-        cyclePrevention = cyclePrevention ::: linksList
-        for (i <- 0 to math.max(-1, cyclePrevention.length-10)) {
-          cyclePrevention = cyclePrevention.tail
+        val tailCandidates = Source.fromFile(tailMaps).getLines()
+        var tailCurrentCandidateFields: Array[String] = Array()
+        var tailMapHasFinished: Boolean = false
+        if(!tailCandidates.isEmpty)
+          tailCurrentCandidateFields = tailCandidates.next().split("\t")
+        else
+          tailMapHasFinished = true
+
+        val stream = new PrintStream(mergedCandidateMap, "UTF-8")
+        while(!headMapHasFinished && !tailMapHasFinished){
+          headCurrentCandidateFields(0).compareTo(tailCurrentCandidateFields(0)) match {
+            case x if x < 0 => {
+              stream.println(headCurrentCandidateFields.mkString("\t") + "\t" + headMapSourceCode)
+              if(!headCandidates.isEmpty)
+                headCurrentCandidateFields = headCandidates.next().split("\t")
+              else
+                headMapHasFinished = true
+            }
+            case x if x > 0 => {
+              stream.println(tailCurrentCandidateFields.mkString("\t"))
+              if(!tailCandidates.isEmpty)
+                tailCurrentCandidateFields = tailCandidates.next().split("\t")
+              else
+                tailMapHasFinished = true
+            }
+            case 0 => {
+              headCurrentCandidateFields(1).compareTo(tailCurrentCandidateFields(1)) match {
+                case x if x < 0 => {
+                  stream.println(headCurrentCandidateFields.mkString("\t") + "\t" + headMapSourceCode)
+                  if(!headCandidates.isEmpty)
+                    headCurrentCandidateFields = headCandidates.next().split("\t")
+                  else
+                    headMapHasFinished = true
+                }
+                case x if x > 0 => {
+                  stream.println(tailCurrentCandidateFields.mkString("\t"))
+                  if(!tailCandidates.isEmpty)
+                    tailCurrentCandidateFields = tailCandidates.next().split("\t")
+                  else
+                    tailMapHasFinished = true
+                }
+                case 0 => {
+                  //Merge the candidate count
+                  val count:Int = headCurrentCandidateFields(2).toInt + tailCurrentCandidateFields(2).toInt
+                  //Merge candidate sources
+                  val sources:String = headMapSourceCode + tailCurrentCandidateFields(3)
+                  //Define the merged candidate entry
+                  val outputFields = List[String](tailCurrentCandidateFields(0), tailCurrentCandidateFields(1), count.toString, sources)
+                  //Print to the output merged file the merged candidate
+                  stream.println(outputFields.mkString("\t"))
+
+                  //Get next candidates from both maps (as they have no duplicates and are ordered)
+                  if(!headCandidates.isEmpty)
+                    headCurrentCandidateFields = headCandidates.next().split("\t")
+                  else
+                    headMapHasFinished = true
+                  if(!tailCandidates.isEmpty)
+                    tailCurrentCandidateFields = tailCandidates.next().split("\t")
+                  else
+                    tailMapHasFinished = true
+                }
+              }
+            }
+          }
         }
+        //As the candidates of one of the files has finished then the resting candidates of the other shall be copied to the merged file, without the need of performing the merging verifications
+        if(!headMapHasFinished){
+          //Copy the resting candidates from the head map into the merged map adding the source column (which going to be only the head map source)
+          stream.println(headCurrentCandidateFields.mkString("\t") + "\t" + headMapSourceCode)
+          headCandidates.foreach{ line =>
+            stream.println(line + "\t" + headMapSourceCode)
+          }
+        }else if(!tailMapHasFinished){
+          stream.println(tailCurrentCandidateFields.mkString("\t"))
+          //Copy the resting candidates from the tail maps into the merged map without adding the source column (because as the tail maps were already merged into a temp merged map this candidates already have theirs sources)
+          tailCandidates.foreach(stream.println(_))
+        }
+        stream.close()
+
+        if(!tailMaps.delete)
+          SpotlightLog.warn(this.getClass,"Could not delete the temporary candidate map file at: %s", tailMaps.getCanonicalPath)
       }
+
+      mergedCandidateMap
     }
 
-    surfaceFormsStream.close()
-    SpotlightLog.info(this.getClass, "Done.")
-    //        surfaceFormsFileName = surfaceFormsFile.getAbsolutePath
-    //        IndexConfiguration.set("surfaceForms", surfaceFormsFileName)
-  }
-
-  // Returns a cleaned surface form if it is considered to be worth keeping
-  def getCleanSurfaceForm(surfaceForm : String, stopWords : Set[String], lowerCased : Boolean=false) : Option[String] = {
-    val cleanedSurfaceForm = Factory.SurfaceForm.fromWikiPageTitle(surfaceForm, lowerCased).name
-    if (isGoodSurfaceForm(cleanedSurfaceForm, stopWords)) Some(cleanedSurfaceForm) else None
-  }
-
-  // map from URI to list of surface forms
-  // used by IndexEnricher
-  def getSurfaceFormsMap(surrogatesFile : File, lowerCased : Boolean=false) : Map[String, List[SurfaceForm]] = {
-    SpotlightLog.info(this.getClass, "Getting reverse surrogate mapping...")
-    var reverseMap = Map[String, List[SurfaceForm]]()
-    val separator = "\t"
-
-    val tsvScanner = new Scanner(new FileInputStream(surrogatesFile), "UTF-8")
-    for(line <- Source.fromFile(surrogatesFile, "UTF-8").getLines()) {
-      val el = tsvScanner.nextLine.split(separator)
-      val sf = if (lowerCased) new SurfaceForm(el(0).toLowerCase) else new SurfaceForm(el(0))
-      val uri = el(1)
-      val sfList : List[SurfaceForm] = sf :: reverseMap.get(uri).getOrElse(List[SurfaceForm]())
-      reverseMap = reverseMap.updated(uri, sfList)
-    }
-    SpotlightLog.info(this.getClass, "Done.")
-    reverseMap
-  }
-
-  def exportSurfaceFormsTsvToDBpediaNt(ntFile : File) {
-    if (!new File(surfaceFormsFileName).isFile) {
-      throw new IllegalStateException("surface forms not created yet; call saveSurfaceForms first or set surface forms file")
-    }
-
-    val surfaceFormPredicate = "http://dbpedia.org/ontology/hasSurfaceForm"
-    val predicate = new Resource(surfaceFormPredicate)
-
-    SpotlightLog.info(this.getClass, "Exporting surface forms TSV file %s to dbpedia.org NT-file %s ...", surfaceFormsFileName, ntFile)
-    val ntStream = new PrintStream(ntFile, "UTF-8")
-
-    for (line <- Source.fromFile(surfaceFormsFileName, "UTF-8").getLines()) {
-      val elements = line.split("\t")
-      val subj = new Resource(SpotlightConfiguration.DEFAULT_NAMESPACE+elements(1))
-      val obj = new Literal(elements(0), "lang=" + SpotlightConfiguration.DEFAULT_LANGUAGE_I18N_CODE, Literal.STRING)
-      val triple = new Triple(subj, predicate, obj)
-      ntStream.println(triple.toN3)
-    }
-    ntStream.close()
-    SpotlightLog.info(this.getClass, "Done.")
-  }
-
-  def exportSurfaceFormsTsvToLexvoNt(ntFile : File) {
-    if (!new File(surfaceFormsFileName).isFile) {
-      SpotlightLog.warn(this.getClass, "surface forms not created yet; call saveSurfaceForms first or set surface forms file")
-      return
-    }
-    val langString = "eng"
-    val surfaceFormPredicate = "http://lexvo.org/id/lexicalization"
-    val predicate = new Resource(surfaceFormPredicate)
-
-    SpotlightLog.info(this.getClass, "Exporting surface forms TSV file %s to lexvo.org NT-file %s ...", surfaceFormsFileName, ntFile)
-    val ntStream = new PrintStream(ntFile, "UTF-8")
-
-    for (line <- Source.fromFile(surfaceFormsFileName, "UTF-8").getLines()) {
-      val elements = line.split("\t")
-      val subj = new Resource(SpotlightConfiguration.DEFAULT_NAMESPACE+elements(1))
-      val obj = new Resource("http://lexvo.org/id/term/"+langString+"/"+WikiUtil.wikiEncode(elements(0)))
-      val triple = new Triple(subj, predicate, obj)
-      ntStream.println(triple.toN3)
-    }
-    ntStream.close()
-    SpotlightLog.info(this.getClass, "Done.")
-  }
-
-  def sortOccsByURI(anOccsFilePath: String) {
-    // (recommended) sorting the occurrences by URI will speed up context merging during indexing
-    SpotlightLog.info(this.getClass, "Sorting occurrences in the %s file to speed up context merging during indexing and saving to a new file...\n", anOccsFilePath)
-    val targetFileArray = anOccsFilePath.split('.')
-
-    SpotlightLog.info(this.getClass, "Copying initial occs file to a tmp file...\n")
-    val sortedOccsStream = new PrintStream(targetFileArray(0) + "_tmp." + targetFileArray(1), "UTF-8")
-    val source = Source.fromFile(anOccsFilePath)
-    for (line <- source.getLines()) {
-      val lineArray = line.split('\t')
-      sortedOccsStream.println(lineArray(1) + '\t' + lineArray(0) + '\t' + lineArray(2) + '\t' + lineArray(3) + '\t' + lineArray(4))
-    }
-    source.close()
-    SpotlightLog.info(this.getClass, "Done.\n")
-
-    SpotlightLog.info(this.getClass, "Using External Sort to sort the occs file by URI.\n")
-    ExternalSort.sort(new File(targetFileArray(0) + "_tmp." + targetFileArray(1)), new File(targetFileArray(0) + ".uriSorted." + targetFileArray(1)))
-    val tmpSource = Source.fromFile(targetFileArray(0) + "_tmp." + targetFileArray(1))
-    tmpSource.close()
-    val aFile = new File(targetFileArray(0) + "_tmp." + targetFileArray(1))
-    aFile.delete()
-    SpotlightLog.info(this.getClass, "Done.")
-  }
-
-  def scanParagraphs(anOccsFilePath: String, outputDirectory: String, language: String) {
-    val targetFileArray = anOccsFilePath.split('.')
-    val sortedOccsFilePath = targetFileArray(0) + ".uriSorted." + targetFileArray(1)
-    val surfaceFormsOccsFilePath = outputDirectory.replaceAll("""\\""","/") + language + "/surfaceForms-fromOccs.tsv"
-    val surfaceFormsCountFilePath = outputDirectory.replaceAll("""\\""","/") + language + "/surfaceForms-fromOccs.count"
-    val surfaceFormsThreshFilePath = outputDirectory.replaceAll("""\\""","/") + language + "/surfaceForms-fromOccs-thresh3.tsv"
-    val surfaceFormsCopyFilePath = outputDirectory.replaceAll("""\\""","/") + language + "/surfaceForms-fromTitRedDis.tsv"
-
-    SpotlightLog.info(this.getClass, "Extracting Surface Forms from file %s...", sortedOccsFilePath)
-    val surfaceFormsStream = new PrintStream(surfaceFormsOccsFilePath, "UTF-8")
-    for (line <- Source.fromFile(sortedOccsFilePath).getLines()) {
-      val lineArray = line.split("\t")
-      surfaceFormsStream.println(lineArray(2) + "\t" + lineArray(1))
-    }
-    surfaceFormsStream.close()
-    SpotlightLog.info(this.getClass, "Done.")
-
-    val sortedSF = Source.fromFile(surfaceFormsOccsFilePath).getLines().toArray.sorted
-    val fcSortedSF = new ListBuffer[String]()
-    for (sf <- sortedSF) {
-      if (sf != "\t") {
-        //println(sf)
-        //println(sf.split('\t')(0))
-        fcSortedSF += sf.split('\t')(0)
-      }
-    }
-    val countList = fcSortedSF.toSeq.foldLeft(Map.empty[String, Int]) { (m, x) => m + ((x, m.getOrElse(x, 0) + 1)) }
-
-    val finalList = Source.fromFile(surfaceFormsOccsFilePath).getLines().toArray.sorted
-    val surfaceFormsCountStream = new PrintStream(surfaceFormsCountFilePath, "UTF-8")
-    val surfaceFormsThreshStream = new PrintStream(surfaceFormsThreshFilePath, "UTF-8")
-    var count = 0
-    for (item <- countList) {
-      surfaceFormsCountStream.println(item._2 + " " + finalList(count))
-      if (item._2 > 3) {
-        surfaceFormsThreshStream.println(finalList(count))
-      }
-      count += item._2
-    }
-    surfaceFormsCountStream.close()
-    surfaceFormsThreshStream.close()
-
-    SpotlightLog.info(this.getClass, "Making a copy of the Surface Forms file %s...", surfaceFormsFileName)
-    val surfaceFormsCopyStream = new PrintStream(surfaceFormsCopyFilePath, "UTF-8")
-    for (line <- Source.fromFile(surfaceFormsFileName).getLines()) {
-      surfaceFormsCopyStream.println(line)
-    }
-    surfaceFormsCopyStream.close()
-    SpotlightLog.info(this.getClass, "Done.")
-
-    SpotlightLog.info(this.getClass, "Merging results into a single surfaceForms.tsv file...")
-    val finalSurfaceFormsStream = new PrintStream(surfaceFormsFileName, "UTF-8")
-    for (line <- Source.fromFile(surfaceFormsCopyFilePath).getLines()) {
-      finalSurfaceFormsStream.println(line)
-    }
-    finalSurfaceFormsStream.close()
-    val fw = new FileWriter(new File(surfaceFormsFileName))
-    for (line <- Source.fromFile(surfaceFormsOccsFilePath).getLines()) {
-      fw.write(line)
-    }
-    fw.close()
-    SpotlightLog.info(this.getClass, "Done.")
+    return recursiveMerge(candidateMaps, candidateMapsSourceCodes)
   }
 
   def main(args : Array[String]) {
+    /* Get the config file */
     val indexingConfigFileName = args(0)
-    val targetOccsFile = args(1)
-    val config = new IndexingConfiguration(indexingConfigFileName)
+    config = new IndexingConfiguration(indexingConfigFileName)
 
-    val language = config.getLanguage().toLowerCase
+    /* Get candidates maps selected to be used to make the merged candidates map */
+    var candidateMapsCodes: List[Char] = List[Char]()
+    // If no source is informed, then use every sources. Otherwise, validate the informed sources
+    if(args.length < 2)
+      candidateMapsCodes = candidateMappingSources
+    else{
+      candidateMapsCodes = args(1).toUpperCase.toList
+      validateCandidateMappingSourcesToUse(candidateMapsCodes)
+    }
+    var candidateMapFiles: List[File] = List()
 
-    // DBpedia input
+    /* Get input files path (from config file) */
     titlesFileName          = config.get("org.dbpedia.spotlight.data.labels")
     redirectsFileName       = config.get("org.dbpedia.spotlight.data.redirects")
     disambiguationsFileName = config.get("org.dbpedia.spotlight.data.disambiguations")
 
-    // output
+    /* Get output files path (from config file) */
     conceptURIsFileName     = config.get("org.dbpedia.spotlight.data.conceptURIs")
     redirectTCFileName      = config.get("org.dbpedia.spotlight.data.redirectsTC")
+    occsFileName            = config.get("org.dbpedia.spotlight.data.occs")
     surfaceFormsFileName    = config.get("org.dbpedia.spotlight.data.surfaceForms")
 
-    maximumSurfaceFormLength = config.get("org.dbpedia.spotlight.data.maxSurfaceFormLength").toInt
-
-    //DBpedia config
+    /* Get execution options/configurations (from config file) */
+    //Candidates Maps sources language
+    language = config.getLanguage().toLowerCase
+    //DBpedia resources namespace
     SpotlightConfiguration.DEFAULT_NAMESPACE=config.get("org.dbpedia.spotlight.default_namespace",SpotlightConfiguration.DEFAULT_NAMESPACE)
-
-    //Bad URIs -- will exclude any URIs that match these patterns. Used for Lists, disambiguations, etc.
+    //URIs Black List: Bad URIs. (Any URIs that match these patterns shall be excluded. Used for Lists, disambiguations, etc.)
     val blacklistedURIPatternsFileName = config.get("org.dbpedia.spotlight.data.badURIs."+language)
     blacklistedURIPatterns = Source.fromFile(blacklistedURIPatternsFileName).getLines().map( u => u.r ).toSet
-
-    //Stopwords (bad surface forms)
+    //Bad surface forms: (Any surface form that match these patterns shall be excluded.)
+    //  Stopwords (Every stopword is a bad surface form)
     val stopWordsFileName = config.get("org.dbpedia.spotlight.data.stopWords."+language)
-    val stopWords = Source.fromFile(stopWordsFileName, "UTF-8").getLines().toSet
+    stopWords = Source.fromFile(stopWordsFileName, "UTF-8").getLines().toSet
+    //  Maximum surface form length (Any "too long" surface form is a Bad one)
+    maximumSurfaceFormLength = config.get("org.dbpedia.spotlight.data.maxSurfaceFormLength").toInt
 
-    // get concept URIs
-    saveConceptURIs()
+    /* Pre-process input files */
+    //Get concept URIs (and save the respective output file with it)
+    extractConceptURIs()
+    //Get concept URIs (and save an output file with it)
+    extractRedirectsTransitiveClosure()
 
-    // get redirects
-    saveRedirectsTransitiveClosure()
+    /* Extract simple (TRD) candidates */
+    //Get candidates from titles
+    if(candidateMapsCodes.contains('T'))
+      candidateMapFiles = candidateMapFiles :+ extractCandidatesFromTitles(surfaceFormsFileName+".FromTitles.tmp")
+    //Get candidates from redirects
+    if(candidateMapsCodes.contains('R'))
+      candidateMapFiles = candidateMapFiles :+ extractCandidatesFromRedirects(surfaceFormsFileName+".FromRedirects.tmp")
+    //Get candidates from disambiguations
+    if(candidateMapsCodes.contains('D'))
+      candidateMapFiles = candidateMapFiles :+ extractCandidatesFromDisambiguations(surfaceFormsFileName+".FromDisambiguations.tmp")
 
-    // get "clean" surface forms, i.e. the ones obtained from TRDs
-    saveSurfaceForms(stopWords)
+    /* Extract extra candidates using (Wikipedia) Occurrences */
+    if(candidateMapsCodes.contains('O')){
+      //Get the Wikipedia occs
+      ExtractOccsFromWikipedia.main(Array(indexingConfigFileName, occsFileName))
+      //Get candidates from occs
+      candidateMapFiles = candidateMapFiles :+ extractCandidatesFromOccs(surfaceFormsFileName+".FromOccs.tmp")
+    }
 
-    // TODO get "extra" surface forms from wikipedia occurrences. (see:
-    //      should allow user to specify a minimum count threshold
-    //      should perform redirectsTransitiveClosure for target URIs
-    //saveExtraSurfaceForms
+    /* Extract more extra candidates using Mapping-based properties */
+    if(candidateMapsCodes.contains('M')){
+      //TODO - get the "naming properties" from mapping_based properties (this code has not been shared yet)
+      //Get candidates from Mapping-based properties
+      candidateMapFiles = candidateMapFiles :+ extractCandidatesFromMappingBasedProperties(surfaceFormsFileName+".FromMappingBasedProps.tmp")
+    }
 
-    //TODO create another class called CreateLexicalizationsDataset
-    // export to NT format (DBpedia and Lexvo.org)
-    //val dbpediaSurfaceFormsNTFileName = new File("e:/dbpa/data/surface_forms/surface_forms-Wikipedia-TitRedDis.nt")
-    //val lexvoSurfaceFormsNTFileName   = new File("e:/dbpa/data/surface_forms/lexicalizations-Wikipedia-TitRedDis.nt")
-    //exportSurfaceFormsTsvToDBpediaNt(dbpediaSurfaceFormsNTFileName)
-    //exportSurfaceFormsTsvToLexvoNt(lexvoSurfaceFormsNTFileName)
+    /* Candidates maps creating the count column */
+    //Remove duplicates unifying then and defining each candidate count field
+    candidateMapFiles.foreach(constructCountColumn(_))
 
-    // generate the occs.tsv file
-    ExtractOccsFromWikipedia.main(Array(indexingConfigFileName, targetOccsFile))
+    /* Merge all candidates maps (and the source column creation) */
+    val mergedCandidateMap: File = mergeCandidateMaps(candidateMapFiles, candidateMapsCodes)
 
-    // sort the generated file by URI to speed the indexing process
-    sortOccsByURI(targetOccsFile)
+    /* Replace the file surfaceFormsFile by the final extracted candidate map */
+    val finalCandidateMap: File = new File(surfaceFormsFileName)
+    if( (finalCandidateMap.exists() && !finalCandidateMap.delete()) || !mergedCandidateMap.renameTo(finalCandidateMap))
+      SpotlightLog.error(this.getClass, "Could not replace the %s by the extracted candidate map, but it is at: %s", finalCandidateMap.getCanonicalPath, mergedCandidateMap)
+    else
+      SpotlightLog.info(this.getClass, "The candidate map was successfully extracted from the sources: %s. And stored at: %s", candidateMapsCodes.mkString(", "), finalCandidateMap.getCanonicalPath)
 
-    // (optional) preprocess surface forms however you want: produce acronyms, abbreviations, alternative spellings, etc.
-    //            in the example below we scan paragraphs for uri->sf mappings that occurred together more than 3 times.
-    scanParagraphs(targetOccsFile, config.get("org.dbpedia.spotlight.data.outputBaseDir"), config.get("org.dbpedia.spotlight.language_i18n_code"))
+    /* Delete temporary candidate maps files */
+    candidateMapFiles.foreach{ tempCandidateMap =>
+      if(!tempCandidateMap.delete() && tempCandidateMap.exists())
+        SpotlightLog.warn(this.getClass, "Could not delete the temporary candidate map file at: %s", tempCandidateMap.getCanonicalPath)
+    }
+
   }
+
 }
