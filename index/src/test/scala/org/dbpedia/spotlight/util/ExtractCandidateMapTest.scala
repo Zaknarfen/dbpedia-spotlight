@@ -17,11 +17,8 @@ import org.dbpedia.spotlight.log.SpotlightLog
 @RunWith(classOf[JUnitRunner])
 class ExtractCandidateMapTest extends FlatSpec with ShouldMatchers {
 
-  ExtractCandidateMapTest.setConfigFile("conf/indexing.properties")
-
-  ExtractCandidateMapTest.runExtractCandidateMapFrom("TRD")
-  ExtractCandidateMapTest.runExtractCandidateMapFrom("TRDOM")
-
+  ExtractCandidateMapTest.runExtractCandidateMap("TRD")
+  ExtractCandidateMapTest.runExtractCandidateMap("TRDOM")
 
   "Every candidate at the extracted candidate map from any source" should "have the all fields (uri, surface form, count, source) valid" in {
     ExtractCandidateMapTest.finalCandidateMapsFilesNames.foreach{ map =>
@@ -50,118 +47,118 @@ class ExtractCandidateMapTest extends FlatSpec with ShouldMatchers {
 }
 
 object ExtractCandidateMapTest {
-  private var config: IndexingConfiguration = null
-  private var configFileNameTuple: (String, String) = null //( fileName , fileExtension )
+  //Test files (mock and temps) base directory
+  val primaryTestFilesDirName: String = "src"+File.separator+"test"+File.separator+"scala"+File.separator+
+                                        "org"+File.separator+"dbpedia"+File.separator+"spotlight"+File.separator+"util"+
+                                        File.separator+"ExtractCandidateMapTest_mock"  //If working directory is the index module root
+  val alternativeTestFilesDirName: String = "index"+File.separator+primaryTestFilesDirName //If working directory is the dbpedia-spotlight root
 
-  private var titlesConfigEntry: String = ""
-  private var redirectsConfigEntry: String = ""
-  private var disambiguationsConfigEntry: String = ""
-  private var wikipediaDumpconfigEntry: String = ""
-  private var conceptURIsConfigEntry: String = ""
-  private var redirectTCConfigEntry: String= ""
-  private var occsConfigEntry: String = ""
-  private var surfaceFormsConfigEntry: String = ""
-  private var language: String = ""
-  private var languageConfigEntry: String = ""
-  private var blacklistedURIPatternsConfigEntry: String = ""
-  private var stopWordsConfigEntry: String = ""
-  private var maximumSurfaceFormLengthConfigEntry: String = ""
-  private var luceneAnalyzerConfigEntry: String = ""
-  private var maxContextWindowSizeConfigEntry: String = ""
-  private var minContextWindowSizeConfigEntry: String = ""
-  private var languageIl8nCodeConfigEntry: String = ""
+  var testFilesDir: File = new File(primaryTestFilesDirName)
+  if(!testFilesDir.isDirectory)
+    testFilesDir = new File(alternativeTestFilesDirName)
 
-  private def setConfigFile(configFileName: String) = {
-    config = new IndexingConfiguration(configFileName)
+  val testFilesDirPath: String = testFilesDir.getCanonicalPath + File.separator
 
-    val configFileNameExtensionIndex: Int = configFileName.lastIndexOf(".")
-    configFileNameTuple = ( configFileName.substring(0, configFileNameExtensionIndex) , configFileName.substring(configFileNameExtensionIndex+1) )
+  //The config file to use the tests mocks 
+  val testConfigFileName: String = "ExtractCandidateMapTest.indexing.tmp.properties"
 
-    /* Get input configs */
-    titlesConfigEntry          = config.get("org.dbpedia.spotlight.data.labels")
-    redirectsConfigEntry       = config.get("org.dbpedia.spotlight.data.redirects")
-    disambiguationsConfigEntry = config.get("org.dbpedia.spotlight.data.disambiguations")
-    wikipediaDumpconfigEntry   = config.get("org.dbpedia.spotlight.data.wikipediaDump")
-    /* Get output configs */
-    conceptURIsConfigEntry     = config.get("org.dbpedia.spotlight.data.conceptURIs")
-    redirectTCConfigEntry      = config.get("org.dbpedia.spotlight.data.redirectsTC")
-    occsConfigEntry            = config.get("org.dbpedia.spotlight.data.occs")
-    surfaceFormsConfigEntry    = config.get("org.dbpedia.spotlight.data.surfaceForms")
-    /* Get execution options set at config file */
-    language = config.getLanguage().toLowerCase
-    languageConfigEntry = language
-    languageIl8nCodeConfigEntry = config.get("org.dbpedia.spotlight.language_i18n_code")
-    blacklistedURIPatternsConfigEntry = config.get("org.dbpedia.spotlight.data.badURIs."+language)
-    stopWordsConfigEntry = config.get("org.dbpedia.spotlight.data.stopWords."+language)
-    maximumSurfaceFormLengthConfigEntry = config.get("org.dbpedia.spotlight.data.maxSurfaceFormLength")
-    luceneAnalyzerConfigEntry = config.get("org.dbpedia.spotlight.lucene.analyzer")
-    maxContextWindowSizeConfigEntry = config.get("org.dbpedia.spotlight.data.maxContextWindowSize")
-    minContextWindowSizeConfigEntry = config.get("org.dbpedia.spotlight.data.minContextWindowSize")
-  }
+  //Test inputs files
+  val labelsFileName: String = "artificial-labels_pt.nt.bz2"
+  val redirectsFileName: String = "artificial-redirects_pt.nt.bz2"
+  val disambiguationsFileName: String = "artificial-disambiguations_pt.nt.bz2"
+  val wikipediaDumpFileName: String = "artificial-ptwiki-latest-pages-articles.xml"
+
+  var blacklistedURIPatternsFileName: String = "blacklistedURIPatterns.pt.list"
+  val stopWordsFileName: String = "stopwords.list"
+  
+  //Test outputs files
+  val conceptURIsFileName: String = "ExtractCandidateMapTest.conceptURIs.tmp.list"
+  val redirectTCFileName: String= "ExtractCandidateMapTest.redirects_tc.tmp.tsv"
+  val occsFileName: String = "ExtractCandidateMapTest.occs.tmp.tsv"
+  val surfaceFormsFileName: String = "ExtractCandidateMapTest.surfaceForms.tmp.tsv"
+  
+  //Test extraction options
+  val language: String = "Portuguese"
+  val languageIl8nCode: String = "pt"
+  var luceneAnalyzer: String = "org.apache.lucene.analysis.pt.PortugueseAnalyzer"
+  var maximumSurfaceFormLength: String = "50"  
+  var maxContextWindowSize: String = "200"
+  var minContextWindowSize: String = "0"
 
 
-  private var finalCandidateMapsFilesNames: Array[(String, String)] = Array() //Source's Codes ; map file path
+  //List with all temporary files to run the tests
   var tempFilesNames: Array[String] = Array()
 
-  private def runExtractCandidateMapFrom(sourcesCodes: String) =
-    ExtractCandidateMap.main(Array[String](buildTempConfigFile(sourcesCodes), sourcesCodes))
+  //List with all extracted candidate map and its sources
+  var finalCandidateMapsFilesNames: Array[(String, String)] = Array() //Source's Codes ; map file path
+  
+  def createTestConfigFile(sources: String): String = {
+    val testConfigFilePath = testFilesDirPath+sources+"-"+testConfigFileName
+    tempFilesNames = tempFilesNames :+ testConfigFilePath
 
-  /* Build a config file to the test (preventing overwrite of outputfiles) */
-  private def buildTempConfigFile(sourcesCodes: String): String = {
-    val newConfigFileName:String = configFileNameTuple._1+".ExtractCandidateMapTest_"+sourcesCodes+".tmp."+configFileNameTuple._2
-
-    val stream = new PrintStream(newConfigFileName, "UTF-8")
+    val stream = new PrintStream(testConfigFilePath, "UTF-8")
 
     //Input and option lines, can use the same as the original config file
-    stream.println("org.dbpedia.spotlight.data.labels = "+titlesConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.redirects = "+redirectsConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.disambiguations = "+disambiguationsConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.wikipediaDump = "+wikipediaDumpconfigEntry)
-    stream.println("org.dbpedia.spotlight.language = "+languageConfigEntry)
-    stream.println("org.dbpedia.spotlight.language_i18n_code = "+languageIl8nCodeConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.badURIs."+language+" = "+blacklistedURIPatternsConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.stopWords."+language+" = "+stopWordsConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.maxSurfaceFormLength = "+maximumSurfaceFormLengthConfigEntry)
-    stream.println("org.dbpedia.spotlight.lucene.analyzer = "+luceneAnalyzerConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.maxContextWindowSize = "+maximumSurfaceFormLengthConfigEntry)
-    stream.println("org.dbpedia.spotlight.data.minContextWindowSize = "+minContextWindowSizeConfigEntry)
+    stream.println("org.dbpedia.spotlight.language = "+language)
+    stream.println("org.dbpedia.spotlight.language_i18n_code = "+languageIl8nCode)
+    stream.println("org.dbpedia.spotlight.data.maxSurfaceFormLength = "+maximumSurfaceFormLength)
+    stream.println("org.dbpedia.spotlight.lucene.analyzer = "+luceneAnalyzer)
+    stream.println("org.dbpedia.spotlight.data.maxContextWindowSize = "+maximumSurfaceFormLength)
+    stream.println("org.dbpedia.spotlight.data.minContextWindowSize = "+minContextWindowSize)
+
+    stream.println("org.dbpedia.spotlight.data.badURIs."+language.toLowerCase()+" = "+testFilesDirPath+blacklistedURIPatternsFileName)
+    stream.println("org.dbpedia.spotlight.data.stopWords."+language.toLowerCase()+" = "+testFilesDirPath+stopWordsFileName)
+    stream.println("org.dbpedia.spotlight.data.labels = "+testFilesDirPath+labelsFileName)
+    stream.println("org.dbpedia.spotlight.data.redirects = "+testFilesDirPath+redirectsFileName)
+    stream.println("org.dbpedia.spotlight.data.disambiguations = "+testFilesDirPath+disambiguationsFileName)
+    stream.println("org.dbpedia.spotlight.data.wikipediaDump = "+testFilesDirPath+wikipediaDumpFileName)
+
+
     //Output lines, must use a different file to do not overwrite
-    tempFilesNames = tempFilesNames :+ conceptURIsConfigEntry+".ExtractCandidateMapV2_"+sourcesCodes
-    stream.println("org.dbpedia.spotlight.data.conceptURIs = "+tempFilesNames(tempFilesNames.length-1))
-    tempFilesNames = tempFilesNames :+ conceptURIsConfigEntry+".ExtractCandidateMapV2_"+sourcesCodes+".NOT"
-    tempFilesNames = tempFilesNames :+ redirectTCConfigEntry+".ExtractCandidateMapV2_"+sourcesCodes
-    stream.println("org.dbpedia.spotlight.data.redirectsTC = "+tempFilesNames(tempFilesNames.length-1))
-    tempFilesNames = tempFilesNames :+ occsConfigEntry+".ExtractCandidateMapV2_"+sourcesCodes
-    stream.println("org.dbpedia.spotlight.data.occs = "+tempFilesNames(tempFilesNames.length-1))
-    tempFilesNames = tempFilesNames :+ surfaceFormsConfigEntry+".ExtractCandidateMapV2_"+sourcesCodes
-    stream.println("org.dbpedia.spotlight.data.surfaceForms = "+tempFilesNames(tempFilesNames.length-1))
-    //The surfaceForms file is the final candidate maps output (will be used to validate this unit test)
-    finalCandidateMapsFilesNames = finalCandidateMapsFilesNames :+ ( sourcesCodes , tempFilesNames(tempFilesNames.length-1) )
+    var sourceOutputTempFileName: String = testFilesDirPath+sources+"-"+conceptURIsFileName
+    tempFilesNames = tempFilesNames :+ sourceOutputTempFileName
+    tempFilesNames = tempFilesNames :+ (sourceOutputTempFileName+".NOT")
+    stream.println("org.dbpedia.spotlight.data.conceptURIs = "+sourceOutputTempFileName)
+
+    sourceOutputTempFileName = testFilesDirPath+sources+"-"+redirectTCFileName
+    tempFilesNames = tempFilesNames :+ sourceOutputTempFileName
+    stream.println("org.dbpedia.spotlight.data.redirectsTC = "+sourceOutputTempFileName)
+
+    sourceOutputTempFileName = testFilesDirPath+sources+"-"+occsFileName
+    tempFilesNames = tempFilesNames :+ sourceOutputTempFileName
+    stream.println("org.dbpedia.spotlight.data.occs = "+sourceOutputTempFileName)
+
+    sourceOutputTempFileName = testFilesDirPath+sources+"-"+surfaceFormsFileName
+    tempFilesNames = tempFilesNames :+ sourceOutputTempFileName
+    stream.println("org.dbpedia.spotlight.data.surfaceForms = "+sourceOutputTempFileName)
+    finalCandidateMapsFilesNames = finalCandidateMapsFilesNames :+ (sources, sourceOutputTempFileName)
 
     stream.close()
 
-    newConfigFileName
+    testConfigFilePath
   }
 
-  private def cleanTempFiles() : Boolean = {
-    var success = true
+  def cleanTempFiles(): Boolean = {
+    var couldNotDeleteFiles: List[String] = List()
 
-    tempFilesNames.foreach{ fileName =>
-      val file = new File(fileName)
-      if(!file.delete() && file.exists()){
-        SpotlightLog.warn(this.getClass, "Could not delete the temp file: %s", fileName)
-        success = false
-      }
-    }
-    finalCandidateMapsFilesNames.foreach{ tuple =>
-      val file = new File(tuple._2)
-      if(!file.delete() && file.exists()){
-        SpotlightLog.warn(this.getClass, "Could not delete the temp file: %s", tuple._2)
-        success = false
-      }
+    tempFilesNames.foreach{ tempFileName =>
+      val tempFile = new File(tempFileName)
+      if(!tempFile.delete() && tempFile.exists)
+        couldNotDeleteFiles = couldNotDeleteFiles :+ tempFileName
     }
 
-    success
+    if(!couldNotDeleteFiles.isEmpty){
+      SpotlightLog.error(this.getClass, "Could not delete the temporary files listed bellow:\n%s",
+                                        couldNotDeleteFiles.mkString("\n"))
+      return false
+    }
+
+    true
   }
 
+
+
+  def runExtractCandidateMap(sources: String) =
+    ExtractCandidateMap.main(Array[String](ExtractCandidateMapTest.createTestConfigFile(sources), sources))
+  
 }
