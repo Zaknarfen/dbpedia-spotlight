@@ -1,0 +1,29 @@
+American_Video_Entertainment	American Video Entertainment	1	T
+American_Video_Entertainment	Ave	1	D
+Anan	Abacaxi	1	R
+Anan	Anan	1	T
+Astronomia	Astronomia	2	TO
+DBpedia_Spotlight	DBpedia Spotlight	1	T
+Brain_tumor	brain tumours	TO	4
+Bleeding	haemorrhage M	12
+Bangkok_(city)	Bangkok TRD 3
+Radiosurgery	Radio Surgery	O	8
+Thailand	Thailand	 TRDMO	5
+Tissue_(biology)	tissues T	1
+3D	three dimensional	TR	2
+Stereotactic_surgery	Stereotaxic Surgery T	1
+Stereotactic	Stereotaxic Surgery T	1
+Radiation	radiation	DR  2
+Linear_particle_accelerator	Linear Accelerator  T	1
+LPA	Linear Accelerator  0	1
+Consciousness	conscious	D	1
+Congenital_disorder	Malformation	 R	1
+Coagulation	clotting	 M	1
+Capillary	capillaries O	1
+Federal_Government	Federal O	5
+Federal_Government	White House O	2
+State	State	T	1
+Government_agency	Government agencies D	1
+Economy	economic	 RD  2
+Implementation	implementation  M	1
+Rural	Rural	T	1
