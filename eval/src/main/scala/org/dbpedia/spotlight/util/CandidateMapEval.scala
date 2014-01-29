@@ -75,7 +75,7 @@ object CandidateMapEval {
     //Load Gold Standard
     val goldStandard: GoldStandardEssentials = GoldStandardEssentials.buildFromMilneWittenCorpus(new File(args(0)))
     //Load Candidate Map
-    val candidateMap: CandidateMapEssentials = new CandidateMapEssentials(args(1))
+    val candidateMap: CandidateMapEssentials = new CandidateMapEssentials(new File(args(1)))
 
     val eval = new CandidateMapEval(goldStandard, candidateMap)
 
@@ -118,13 +118,13 @@ object GoldStandardEssentials{
 }
 class GoldStandardAnnotationEssentials(val surfaceForm: SurfaceForm, val resource: DBpediaResource){}
 
-class CandidateMapEssentials(private val candidateMapFilePath: String){
+class CandidateMapEssentials(private val candidateMapFile: File){
     /* candidates are pair of (one sf, multiples resources). There is just one candidate per sf. */
     val candidates: List[CandidateEssentials] = {
       var acc: List[CandidateEssentials] = List()
       /* Load the essential candidate map columns (sf and uri) from the candidate map file. Unifying all lines with
          the same  surface form, linking it to its all uris (candidates). */
-      Source.fromFile(candidateMapFilePath).getLines().foreach{ line =>
+      Source.fromFile(candidateMapFile).getLines().foreach{ line =>
         val candidateArray: Array[String] = line.split("\t")
         if(candidateArray.length >= 2){
           val lineSf: SurfaceForm = new SurfaceForm(candidateArray(1))

@@ -14,16 +14,33 @@ import org.dbpedia.spotlight.model.AnnotatedParagraph
  */
 
 @RunWith(classOf[JUnitRunner])
-class TestCorpora extends FlatSpec with ShouldMatchers {
+class CandidateMapEvalTest extends FlatSpec with ShouldMatchers {
 
-  val corpusPath: String = "/home/alexandre/projects/zaknarfen/dbpedia-spotlight/eval/src/test/scala/org/dbpedia/spotlight/util/CandidateMapEvalTest_mocks/mock-MilneWitten"
-  val candidateMapPath: String = "/home/alexandre/projects/zaknarfen/dbpedia-spotlight/eval/src/test/scala/org/dbpedia/spotlight/util/CandidateMapEvalTest_mocks/mock-candidateMap.tsv"
+  //(M&W) Corpus mock
+  val primaryCorpusPath: String = "src/test/scala/org/dbpedia/spotlight/util/CandidateMapEvalTest_mocks/mock-MilneWitten"
+  val alternativeCorpusPath: String = "eval/"+primaryCorpusPath
+
+  //Candidate Map (for sources TRDOM) mock
+  val primaryCandidateMapPath: String = "src/test/scala/org/dbpedia/spotlight/util/CandidateMapEvalTest_mocks/mock-candidateMap.tsv"
+  val alternativeCandidateMapPath: String = "eval/"+primaryCandidateMapPath
+
+  //The input's path can variate depending of the working directory
+  var corpusDir: File = new File(primaryCorpusPath)
+  if(!corpusDir.isDirectory){
+    corpusDir = new File(alternativeCorpusPath)
+  }
+  var candidateMapFile: File = new File(primaryCandidateMapPath)
+  if(!candidateMapFile.isFile)
+    candidateMapFile = new File(alternativeCandidateMapPath)
+
+
+  /* Tests */
 
   "The candidate map evaluation" should "match the metrics for the mock corpus" in {
     //Load Gold Standard
-    val goldStandard: GoldStandardEssentials = GoldStandardEssentials.buildFromMilneWittenCorpus(new File(corpusPath))
+    val goldStandard: GoldStandardEssentials = GoldStandardEssentials.buildFromMilneWittenCorpus(corpusDir)
     //Load Candidate Map
-    val candidateMap: CandidateMapEssentials = new CandidateMapEssentials(candidateMapPath)
+    val candidateMap: CandidateMapEssentials = new CandidateMapEssentials(candidateMapFile)
 
     val eval = new CandidateMapEval(goldStandard, candidateMap)
 
@@ -42,7 +59,7 @@ class TestCorpora extends FlatSpec with ShouldMatchers {
 
   it should "have invalid recalls" in {
     val goldStandard: GoldStandardEssentials = new GoldStandardEssentials(List[AnnotatedParagraph]())
-    val candidateMap: CandidateMapEssentials = new CandidateMapEssentials(candidateMapPath)
+    val candidateMap: CandidateMapEssentials = new CandidateMapEssentials(candidateMapFile)
 
     val eval = new CandidateMapEval(goldStandard, candidateMap)
 
