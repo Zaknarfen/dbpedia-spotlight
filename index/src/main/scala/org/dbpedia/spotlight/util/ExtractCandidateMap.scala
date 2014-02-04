@@ -92,15 +92,13 @@ object ExtractCandidateMap {
 
     SpotlightLog.info(this.getClass, "  collecting bad URIs from redirects in %s and disambiguations in %s ...", redirectsFileName, disambiguationsFileName)
     // redirects and disambiguations are bad URIs
-    val pattern = new Regex("""(\w*)/resource/(\w*)""", "stringToReplace", "uri")
     for (fileName <- List(redirectsFileName, disambiguationsFileName)) {
       val input = new BZip2CompressorInputStream(new FileInputStream(fileName),true)
-      //for(triple <- new NxParser(input)
       val parser = new NxParser(input)
       while (parser.hasNext) {
         val triple = parser.next
         try {
-          val badUri = pattern.findFirstMatchIn(triple(0).toString).get.group("uri")
+          val badUri = triple(0).toString
           badURIs += badUri
           badURIStream.println(badUri)
         } catch {
@@ -120,10 +118,9 @@ object ExtractCandidateMap {
     while (parser.hasNext) {
       val triple = parser.next
       try {
-        val uri = pattern.findFirstMatchIn(triple(0).toString).get.group("uri")
-        if (looksLikeAGoodURI(uri) && !badURIs.contains(uri)) {
+        val uri = triple(0).toString
+        if (looksLikeAGoodURI(uri) && !badURIs.contains(uri))
           conceptURIStream.println(uri)
-        }
       } catch {
         case e: Exception => {
           SpotlightLog.info(this.getClass, "String in the wrong format skipped! ") // In case a string not containing a /resource/ is passed
@@ -140,8 +137,8 @@ object ExtractCandidateMap {
   /* Verify if the informed uri is (looks like) a good uri */
   private def looksLikeAGoodURI(uri : String) : Boolean = {
     // cannot contain a slash (/)
-    if (uri contains "/")
-      return false
+    //if (uri contains "/")
+    //  return false
     // cannot contain a hash (#)
     if (uri contains "%23") //TODO re-evaluate this decision in context of DBpedia 3.7
       return false
@@ -171,12 +168,11 @@ object ExtractCandidateMap {
     val redirectsInput = new BZip2CompressorInputStream(new FileInputStream(redirectsFileName), true)
 
     val parser = new NxParser(redirectsInput)
-    val pattern = new Regex("""(\w*)/resource/(\w*)""", "stringToReplace", "uri")
     while (parser.hasNext) {
       val triple = parser.next
       try {
-        val subj = pattern.findFirstMatchIn(triple(0).toString).get.group("uri")
-        val obj = pattern.findFirstMatchIn(triple(2).toString).get.group("uri")
+        val subj = triple(0).toString
+        val obj = triple(2).toString
         linkMap = linkMap.updated(subj, obj)
       } catch {
         case e: Exception => {
@@ -283,13 +279,16 @@ object ExtractCandidateMap {
       return false
     }
     // contains a non-stopWord  //TODO Remove when case sensitivity and common-word/idiom detection is in place. This restriction will eliminate many works (books, movies, etc.) like Just_One_Fix, We_Right_Here, etc.
-    if (stopWords.nonEmpty
-      && surfaceForm.split(" ").filterNot(
-      sfWord => stopWords.map(stopWord => stopWord.toLowerCase)
-        contains
-        sfWord.toLowerCase
-    ).isEmpty) {
-      return false
+    //if (stopWords.nonEmpty &&
+    //    surfaceForm.split(" ").filterNot(sfWord => stopWords.map(stopWord => stopWord.toLowerCase) contains sfWord.toLowerCase
+    //    ).isEmpty) {
+    //  return false
+    //}
+    //true
+    if (stopWords.nonEmpty) {
+      for (sfWord <- surfaceForm.split(" ")) {
+        if (stopWords contains sfWord.toLowerCase) return false
+      }
     }
     true
   }
@@ -322,7 +321,7 @@ object ExtractCandidateMap {
     for (conceptUri <- Source.fromFile(conceptURIsFileName, "UTF-8").getLines()) {
       conceptURIs += conceptUri
     }
-    val pattern = new Regex("""(\w*)/resource/(\w*)""", "stringToReplace", "uri")
+
     val stream = new PrintStream(specificCandidatesFileName, "UTF-8")
     for (fileName <- List((new File(sourceFileName)))) {
       val input = new BZip2CompressorInputStream(new FileInputStream(fileName), true)
@@ -330,8 +329,8 @@ object ExtractCandidateMap {
       while (parser.hasNext) {
         val triple = parser.next
         try {
-          val surfaceFormUri = pattern.findFirstMatchIn(triple(0).toString).get.group("uri")
-          val uri = pattern.findFirstMatchIn(triple(2).toString).get.group("uri")
+          val surfaceFormUri = triple(0).toString
+          val uri = triple(2).toString
 
           if (conceptURIs contains uri) {
             getCleanSurfaceForm(surfaceFormUri, stopWords, lowerCased) match {
@@ -634,15 +633,17 @@ object ExtractCandidateMap {
     //Bad surface forms: (Any surface form that match these patterns shall be excluded.)
     //  Stopwords (Every stopword is a bad surface form)
     val stopWordsFileName = config.get("org.dbpedia.spotlight.data.stopWords."+language)
-    stopWords = Source.fromFile(stopWordsFileName, "UTF-8").getLines().toSet
+    stopWords = Source.fromFile(stopWordsFileName, "UTF-8").getLines().toSet//[String].map(stopWord => stopWord.toLowerCase)
     //  Maximum surface form length (Any "too long" surface form is a Bad one)
     maximumSurfaceFormLength = config.get("org.dbpedia.spotlight.data.maxSurfaceFormLength").toInt
 
     /* Pre-process input files */
     //Get concept URIs (and save the respective output file with it)
     extractConceptURIs()
+
     //Get concept URIs (and save an output file with it)
     extractRedirectsTransitiveClosure()
+    System.exit(1)
 
     /* Extract simple (TRD) candidates */
     //Get candidates from titles
