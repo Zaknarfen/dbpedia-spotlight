@@ -633,7 +633,7 @@ object ExtractCandidateMap {
     //Bad surface forms: (Any surface form that match these patterns shall be excluded.)
     //  Stopwords (Every stopword is a bad surface form)
     val stopWordsFileName = config.get("org.dbpedia.spotlight.data.stopWords."+language)
-    stopWords = Source.fromFile(stopWordsFileName, "UTF-8").getLines().toSet//[String].map(stopWord => stopWord.toLowerCase)
+    stopWords = Source.fromFile(stopWordsFileName, "UTF-8").getLines().toSet[String].map(stopWord => stopWord.toLowerCase)
     //  Maximum surface form length (Any "too long" surface form is a Bad one)
     maximumSurfaceFormLength = config.get("org.dbpedia.spotlight.data.maxSurfaceFormLength").toInt
 
@@ -643,7 +643,6 @@ object ExtractCandidateMap {
 
     //Get concept URIs (and save an output file with it)
     extractRedirectsTransitiveClosure()
-    System.exit(1)
 
     /* Extract simple (TRD) candidates */
     //Get candidates from titles
@@ -656,6 +655,7 @@ object ExtractCandidateMap {
     if(candidateMapsCodes.contains('D'))
       candidateMapFiles = candidateMapFiles :+ extractCandidatesFromDisambiguations(surfaceFormsFileName+".FromDisambiguations.tmp")
 
+    System.exit(1)
     /* Extract extra candidates using (Wikipedia) Occurrences */
     if(candidateMapsCodes.contains('O')){
       //Get the Wikipedia occs
