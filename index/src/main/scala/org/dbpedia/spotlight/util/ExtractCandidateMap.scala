@@ -92,6 +92,7 @@ object ExtractCandidateMap {
 
     SpotlightLog.info(this.getClass, "  collecting bad URIs from redirects in %s and disambiguations in %s ...", redirectsFileName, disambiguationsFileName)
     // redirects and disambiguations are bad URIs
+    var i = 1
     for (fileName <- List(redirectsFileName, disambiguationsFileName)) {
       val input = new BZip2CompressorInputStream(new FileInputStream(fileName),true)
       val parser = new NxParser(input)
@@ -106,10 +107,14 @@ object ExtractCandidateMap {
             SpotlightLog.info(this.getClass, "String in the wrong format skipped! ") // In case a string not containing a /resource/ is passed
           }
         }
+
+        if (i % 100000 == 0) println(i + " lines processed... e tripla = " + triple)
+        i += 1
       }
       input.close()
     }
     badURIStream.close()
+    println("Concepts NOT done.")
 
     SpotlightLog.info(this.getClass, "  collecting concept URIs from titles in %s, without redirects and disambiguations...", titlesFileName)
     val titlesInputStream = new BZip2CompressorInputStream(new FileInputStream(titlesFileName), true)
