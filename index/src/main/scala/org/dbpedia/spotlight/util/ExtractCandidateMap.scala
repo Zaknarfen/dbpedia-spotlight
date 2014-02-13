@@ -660,7 +660,6 @@ object ExtractCandidateMap {
     if(candidateMapsCodes.contains('D'))
       candidateMapFiles = candidateMapFiles :+ extractCandidatesFromDisambiguations(surfaceFormsFileName+".FromDisambiguations.tmp")
 
-    System.exit(1)
     /* Extract extra candidates using (Wikipedia) Occurrences */
     if(candidateMapsCodes.contains('O')){
       //Get the Wikipedia occs
