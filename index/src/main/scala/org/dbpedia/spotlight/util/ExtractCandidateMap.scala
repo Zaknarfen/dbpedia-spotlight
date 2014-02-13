@@ -108,7 +108,7 @@ object ExtractCandidateMap {
           }
         }
 
-        if (i % 100000 == 0) println(i + " lines processed... e tripla = " + triple)
+        if (i % 100000 == 0) println(i + " lines processed... e tripla = " + triple(0) + " e " + triple(1) + " e " + triple(2))
         i += 1
       }
       input.close()
