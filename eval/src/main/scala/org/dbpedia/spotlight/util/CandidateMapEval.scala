@@ -79,20 +79,20 @@ object CandidateMapEval {
 
     val eval = new CandidateMapEval(goldStandard, candidateMap)
 
-    println("* Input Info *")
-    println("(# of GS annotations) = " + eval.getNumOfGoldStandardsAnnotations)
-    println("(# of not duplicated sf at GS) = " + eval.getNumOfGoldStandardsSfWithoutDuplication)
-    println("(# of not duplicated sf at CM) = " + eval.getNumOfCandidateMapSurfaceForms)
+    SpotlightLog.info(this.getClass, "* Input Info *" +
+                                     "\n(# of GS annotations) = " + eval.getNumOfGoldStandardsAnnotations+
+                                     "\n(# of not duplicated sf at GS) = " + eval.getNumOfGoldStandardsSfWithoutDuplication+
+                                     "\n(# of not duplicated sf at CM) = " + eval.getNumOfCandidateMapSurfaceForms)
 
-    println("* Metrics *")
-    println("(# of GS annotations that the sf is at the CM) = " + eval.getNumOfGoldStandardsSfAtCandidateMap)
-    println("(# of GS annotations that the sf is at the CM \nand the annotation resource is one candidate for this sf) = " + eval.getNumOfGoldStandardsURIsAtRespectiveCandidateURIs)
-    println("(# of GS annotations that the sf is at the CM, \nbut the annotation resource is NOT one candidate for this sf) = " + eval.getNumOfGoldStandardsURIsNotAtRespectiveCandidateURIs)
-    println("(# of GS annotations that the sf is NOT at the CM) = " + eval.getNumOfGoldStandardsSfNotAtCandidateMap)
+    SpotlightLog.info(this.getClass, "* Metrics *"+
+                                     "\n(# of GS annotations that the sf is at the CM) = " + eval.getNumOfGoldStandardsSfAtCandidateMap+
+                                     "\n(# of GS annotations that the sf is at the CM \nand the annotation resource is one candidate for this sf) = " + eval.getNumOfGoldStandardsURIsAtRespectiveCandidateURIs+
+                                     "\n(# of GS annotations that the sf is at the CM, \nbut the annotation resource is NOT one candidate for this sf) = " + eval.getNumOfGoldStandardsURIsNotAtRespectiveCandidateURIs+
+                                     "\n(# of GS annotations that the sf is NOT at the CM) = " + eval.getNumOfGoldStandardsSfNotAtCandidateMap)
 
-    println("** Recall **")
-    println("Surface Forms Recall (Ration of sf from Corpus at CM by not duplicated sf of Corpus) = " + eval.surfaceFormsRecall)
-    println("Resources Recall (Ration of retrieved resources by retrieved sf) = " + eval.resourcesRecall)
+    SpotlightLog.info(this.getClass, "** Recall **"+
+                                     "\nSurface Forms Recall (Ration of sf from Corpus at CM by not duplicated sf of Corpus) = " + eval.surfaceFormsRecall+
+                                     "\nResources Recall (Ration of retrieved resources by retrieved sf) = " + eval.resourcesRecall)
   }
 
 }
